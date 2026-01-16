@@ -2,6 +2,19 @@
 
 Marks your current street view location on the GeoGuessr map with a red dot. Toggled with the key '1'.
 
+## Preview
+
+### Map
+![Map with marker](preview/Map%20With.png)
+![Map without marker](preview/Map%20Without.png)
+
+### Toggle Button
+![Toggle on](preview/Toggle%20With.png)
+![Toggle off](preview/Toggle%20Without.png)
+
+### Settings
+![Settings panel](preview/Settings.png)
+
 ## Installation (Chrome + Tampermonkey)
 
 ### Step 1: Enable Developer Mode in Chrome
