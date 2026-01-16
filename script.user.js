@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         GhostGuessr
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Marks your Current Streeview Location on the GeoGuessr Map with a Red Dot. Toggled with the Key '1'
-// @author       VellusFox
+// @version      1.1
+// @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggled with the Key '1'. Marker is non-clickable.
+// @author       VellusFox, Niceas
 // @match        https://www.geoguessr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=geoguessr.com
 // @grant        none
@@ -87,8 +87,15 @@
                     icon: icon,
                     opacity: 0.8,
                     zIndex: 999,
-                    optimized: false
+                    optimized: false,
+                    clickable: false,
+                    draggable: false
                 });
+                if (marker) {
+                    google.maps.event.clearListeners(marker, 'click');
+                    google.maps.event.clearListeners(marker, 'mousedown');
+                    google.maps.event.clearListeners(marker, 'mouseup');
+                }
             }
         } catch(e) {
             createDivMarker();
@@ -116,6 +123,7 @@
             pointer-events: none !important;
             z-index: 9999 !important;
             box-shadow: 0 0 10px rgba(255, 0, 0, 0.5) !important;
+            cursor: default !important;
         `;
         container.appendChild(markerDiv);
     }
