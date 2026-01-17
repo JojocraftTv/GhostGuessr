@@ -18,15 +18,30 @@
     "ghostguessr-main.js",
   ];
 
-  const loadScript = (src) =>
-    new Promise((resolve, reject) => {
+  const loadScript = async (src) => {
+    const response = await fetch(src, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Failed to load ${src}: ${response.status}`);
+    }
+    const code = await response.text();
+    const blob = new Blob([code], { type: "text/javascript" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = src;
+      script.src = blobUrl;
       script.async = false;
-      script.onload = () => resolve(src);
-      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      script.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve(src);
+      };
+      script.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        reject(new Error(`Failed to execute ${src}`));
+      };
       document.head.appendChild(script);
     });
+  };
 
   const loadAllScripts = async () => {
     for (const file of files) {

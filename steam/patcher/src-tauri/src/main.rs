@@ -109,7 +109,7 @@ fn patch_inner(
   let app_asar = resources.join("app.asar");
   let backup = resources.join("app.asar.bak");
   let extracted = resources.join("app.asar.extracted");
-  let ghost_script = extracted.join("ghostguessr.user.js");
+  let ghost_script = extracted.join("ghostguessr-preload.js");
   let main_js = extracted.join("main.js");
 
   if !app_asar.exists() {
@@ -183,11 +183,28 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
   let header_need = "const { app, BrowserWindow, shell, session } = require(\"electron\");";
   let header_replace = [
     "const { app, BrowserWindow, shell, session } = require(\"electron\");",
-    "const fs = require(\"fs\");",
     "const path = require(\"path\");",
   ].join("\n");
 
-  let inject_block = [
+  let load_need = "  mainWindow.loadFile(\"index.html\");";
+
+  let mut updated = source.clone();
+  if !updated.contains("ghostguessr-preload.js") {
+    if !updated.contains(header_need) || !updated.contains(load_need) {
+      return Err("main.js structure not recognized.".to_string());
+    }
+    updated = updated.replace(header_need, &header_replace);
+    if updated.contains("webPreferences: {") {
+      updated = updated.replace(
+        "webPreferences: {",
+        "webPreferences: {\n      preload: path.join(__dirname, \"ghostguessr-preload.js\"),",
+      );
+    } else {
+      return Err("webPreferences block not found.".to_string());
+    }
+  }
+
+  let old_inject_block = [
     "const buildGhostInject = (raw) => {",
     "  const prefix = `(() => {",
     "  if (window.__ghostguessrInjected) return;",
@@ -207,9 +224,11 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
     "}",
   ].join("\n");
 
-  let base_url = "const baseUrl = environments[environment];";
-  let load_need = "  mainWindow.loadFile(\"index.html\");";
-  let hook_block = [
+  if updated.contains(&old_inject_block) {
+    updated = updated.replace(&old_inject_block, "");
+  }
+
+  let old_hook_block = [
     "  mainWindow.webContents.on(",
     "    \"did-frame-finish-load\",",
     "    (event, isMainFrame, frameProcessId, frameRoutingId) => {",
@@ -235,14 +254,8 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
     "  );",
   ].join("\n");
 
-  let mut updated = source.clone();
-  if !updated.contains("ghostguessr.user.js") {
-    if !updated.contains(header_need) || !updated.contains(base_url) || !updated.contains(load_need) {
-      return Err("main.js structure not recognized.".to_string());
-    }
-    updated = updated.replace(header_need, &header_replace);
-    updated = updated.replace(base_url, &format!("{}\n\n{}", base_url, inject_block));
-    updated = updated.replace(load_need, &format!("{}\n\n{}", load_need, hook_block));
+  if updated.contains(&old_hook_block) {
+    updated = updated.replace(&old_hook_block, "");
   }
 
   if enable_devtools {
@@ -374,7 +387,10 @@ fn to_game_root(resources: &Path) -> PathBuf {
 
 fn is_patched(app_asar: &Path) -> Result<bool, String> {
   let list = list_package(app_asar).map_err(|e| format!("Asar list failed: {e}"))?;
-  Ok(list.iter().any(|line| line.trim_end().ends_with("ghostguessr.user.js")))
+  Ok(list.iter().any(|line| {
+    let trimmed = line.trim_end();
+    trimmed.ends_with("ghostguessr-preload.js") || trimmed.ends_with("ghostguessr.user.js")
+  }))
 }
 
 fn main() {

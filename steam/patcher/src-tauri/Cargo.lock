@@ -3,6 +3,26 @@
 version = 4
 
 [[package]]
+name = "GhostGuessr-Patcher"
+version = "2.0.0"
+dependencies = [
+ "glob",
+ "hex",
+ "open",
+ "path-absolutize",
+ "pathdiff 0.1.0",
+ "reqwest 0.11.27",
+ "rfd",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tempfile",
+ "winreg 0.11.0",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1265,26 +1285,6 @@ dependencies = [
  "libc",
  "r-efi",
  "wasip2",
-]
-
-[[package]]
-name = "ghostguessr-patcher"
-version = "1.0.0"
-dependencies = [
- "glob",
- "hex",
- "open",
- "path-absolutize",
- "pathdiff 0.1.0",
- "reqwest 0.11.27",
- "rfd",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tempfile",
- "winreg 0.11.0",
 ]
 
 [[package]]
