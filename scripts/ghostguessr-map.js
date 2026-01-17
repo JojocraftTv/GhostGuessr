@@ -170,8 +170,6 @@
   };
 
   GG.toggleMarker = function () {
-    if (!GG.coords.lat || !GG.coords.lng) return;
-
     let isOnMapView =
       document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
       document.querySelector(".guess-map_canvas__cvpqv");
@@ -179,6 +177,8 @@
 
     GG.settings.enabled = !GG.settings.enabled;
     GG.saveSettings();
+
+    if (!GG.coords.lat || !GG.coords.lng) return;
 
     if (GG.settings.enabled) {
       GG.placeMarker();
