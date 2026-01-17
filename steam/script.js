@@ -8,7 +8,7 @@
   "use strict";
 
   const SCRIPT_BASE =
-    "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/";
+    "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/test/scripts/";
   const files = [
     "ghostguessr-state.js",
     "ghostguessr-utils.js",
