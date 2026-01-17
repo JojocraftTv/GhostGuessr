@@ -5,7 +5,7 @@
 // @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.
 // @author       VellusFox, Niceas
 // @match        https://www.geoguessr.com/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=geoguessr.com
+// @icon         https://raw.githubusercontent.com/nici002018/GhostGuessr/refs/heads/main/icons/GhostGuessr.png
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @license      MIT
@@ -82,7 +82,7 @@
     gmap = null;
     try {
       let reactKey = Object.keys(container).find((key) =>
-        key.startsWith("__reactFiber$")
+        key.startsWith("__reactFiber$"),
       );
       if (reactKey) {
         let fiber = container[reactKey];
@@ -184,17 +184,17 @@
             height: ${settings.size * 2.5}px !important;
             background: ${hexToRgba(
               settings.markerColor,
-              settings.opacity
+              settings.opacity,
             )} !important;
             border: ${settings.outlineWidth}px solid ${
-      settings.outlineColor
-    } !important;
+              settings.outlineColor
+            } !important;
             border-radius: 50% !important;
             pointer-events: none !important;
             z-index: 9999 !important;
             box-shadow: 0 0 10px ${hexToRgba(
               settings.markerColor,
-              settings.opacity * 0.5
+              settings.opacity * 0.5,
             )} !important;
             cursor: default !important;
         `;
@@ -244,7 +244,7 @@
     let svgContainer = document.createElement("div");
     svgContainer.style.cssText = "transform: none;";
     svgContainer.innerHTML = createSvg(
-      settings.enabled ? "#00FF00" : "#FF0000"
+      settings.enabled ? "#00FF00" : "#FF0000",
     );
     toggleButton.appendChild(svgContainer);
 
@@ -300,7 +300,7 @@
     if (!svgContainer) return;
 
     svgContainer.innerHTML = createSvg(
-      settings.enabled ? "#00FF00" : "#FF0000"
+      settings.enabled ? "#00FF00" : "#FF0000",
     );
 
     if (settings.enabled) {
@@ -381,7 +381,7 @@
 
   function createGhostMarkerSettings() {
     const settingsContainer = document.querySelector(
-      ".game-menu_settingsContainer__NeJu2"
+      ".game-menu_settingsContainer__NeJu2",
     );
     if (!settingsContainer) return;
     if (settingsContainer.querySelector(".ghost-marker-settings-container")) {
@@ -392,13 +392,13 @@
       .querySelectorAll(".ghost-marker-setting")
       .forEach((el) => el.remove());
     const buttonsContainer = settingsContainer.querySelector(
-      ".buttons_buttons__3yvvA"
+      ".buttons_buttons__3yvvA",
     );
     const closeButton = settingsContainer.querySelector(
-      'button[class*="button_button"]'
+      'button[class*="button_button"]',
     );
     const dividers = settingsContainer.querySelectorAll(
-      ".game-menu_divider__IhA4t"
+      ".game-menu_divider__IhA4t",
     );
     const lastDivider = dividers[dividers.length - 1] || null;
     const useExistingDivider = Boolean(lastDivider);
@@ -658,7 +658,7 @@
       min,
       max,
       step,
-      onChange
+      onChange,
     ) => {
       let isDragging = false;
 
@@ -718,7 +718,7 @@
                 </svg>
             `;
         saveSettings();
-      }
+      },
     );
 
     opacitySliderContainer.appendChild(opacityIcon);
@@ -790,7 +790,7 @@
                 </svg>
             `;
         saveSettings();
-      }
+      },
     );
 
     widthSliderContainer.appendChild(widthIcon);
@@ -818,10 +818,10 @@
     sizeIcon.innerHTML = `
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="${settings.size / 2}" fill="${
-      settings.markerColor
-    }" fill-opacity="${settings.opacity}" stroke="${
-      settings.outlineColor
-    }" stroke-width="${settings.outlineWidth}"/>
+                  settings.markerColor
+                }" fill-opacity="${settings.opacity}" stroke="${
+                  settings.outlineColor
+                }" stroke-width="${settings.outlineWidth}"/>
             </svg>
         `;
 
@@ -863,14 +863,14 @@
         sizeIcon.innerHTML = `
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="12" r="${value / 2}" fill="${
-          settings.markerColor
-        }" fill-opacity="${settings.opacity}" stroke="${
-          settings.outlineColor
-        }" stroke-width="${settings.outlineWidth}"/>
+                      settings.markerColor
+                    }" fill-opacity="${settings.opacity}" stroke="${
+                      settings.outlineColor
+                    }" stroke-width="${settings.outlineWidth}"/>
                 </svg>
             `;
         saveSettings();
-      }
+      },
     );
 
     sizeSliderContainer.appendChild(sizeIcon);
@@ -888,14 +888,14 @@
     if (useExistingDivider && lastDivider.parentNode) {
       lastDivider.parentNode.insertBefore(
         ghostSettingsContainer,
-        lastDivider.nextSibling
+        lastDivider.nextSibling,
       );
     } else if (closeButton && closeButton.parentNode) {
       closeButton.parentNode.insertBefore(ghostSettingsContainer, closeButton);
     } else if (buttonsContainer && buttonsContainer.parentNode) {
       buttonsContainer.parentNode.insertBefore(
         ghostSettingsContainer,
-        buttonsContainer
+        buttonsContainer,
       );
     } else {
       settingsContainer.appendChild(ghostSettingsContainer);
@@ -918,7 +918,7 @@
       }
 
       const settingsContainer = document.querySelector(
-        ".game-menu_settingsContainer__NeJu2"
+        ".game-menu_settingsContainer__NeJu2",
       );
       if (settingsContainer && settingsContainer.offsetParent !== null) {
         createGhostMarkerSettings();
@@ -929,10 +929,10 @@
 
     const observer = new MutationObserver(function (mutations) {
       const buttonContainerExists = document.querySelector(
-        ".styles_columnTwo__kyT60"
+        ".styles_columnTwo__kyT60",
       );
       const ourButtonExists = document.querySelector(
-        '[data-qa="ghost-marker-toggle"]'
+        '[data-qa="ghost-marker-toggle"]',
       );
 
       if (buttonContainerExists && !ourButtonExists) {
@@ -947,7 +947,7 @@
       }
 
       const settingsContainer = document.querySelector(
-        ".game-menu_settingsContainer__NeJu2"
+        ".game-menu_settingsContainer__NeJu2",
       );
       if (settingsContainer && settingsContainer.offsetParent !== null) {
         createGhostMarkerSettings();
