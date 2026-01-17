@@ -169,6 +169,43 @@
     }
   };
 
+  GG.ensureMarkerVisible = function (attempt) {
+    if (!GG.settings) {
+      setTimeout(() => GG.ensureMarkerVisible(attempt), 100);
+      return;
+    }
+
+    if (!GG.settings.enabled) return;
+    if (!GG.coords.lat || !GG.coords.lng) return;
+    if (GG.divMarkerActive) {
+      const mapNow = GG.getGoogleMap();
+      if (!mapNow || typeof mapNow.getDiv !== "function") return;
+      const divMarker = document.getElementById("geo-div-marker");
+      if (divMarker) divMarker.remove();
+      GG.divMarkerActive = false;
+    }
+
+    let isOnMapView =
+      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
+      document.querySelector(".guess-map_canvas__cvpqv");
+    if (!isOnMapView) return;
+
+    GG.placeMarker();
+
+    if (!GG.marker) {
+      const nextAttempt = (attempt || 0) + 1;
+      if (nextAttempt <= 30) {
+        if (GG.markerRetryId) {
+          clearTimeout(GG.markerRetryId);
+        }
+        GG.markerRetryId = setTimeout(
+          () => GG.ensureMarkerVisible(nextAttempt),
+          500,
+        );
+      }
+    }
+  };
+
   GG.toggleMarker = function () {
     if (!GG.coords.lat || !GG.coords.lng) return;
 
