@@ -12,7 +12,7 @@
         GG.createToggleButton();
       }
       if (GG.settings.enabled) {
-        GG.placeMarker();
+        GG.ensureMarkerVisible();
       }
 
       const settingsContainer = document.querySelector(
@@ -41,7 +41,7 @@
         }, 500);
       }
       if (GG.settings.enabled) {
-        GG.placeMarker();
+        GG.ensureMarkerVisible();
       }
 
       const settingsContainer = document.querySelector(

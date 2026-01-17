@@ -20,7 +20,7 @@
             let split = match.split(",");
             GG.coords.lat = Number.parseFloat(split[0]);
             GG.coords.lng = Number.parseFloat(split[1]);
-            if (GG.settings.enabled) GG.placeMarker();
+            if (GG.settings.enabled) GG.ensureMarkerVisible();
           }
         } catch (e) {}
       });
@@ -169,6 +169,31 @@
     }
   };
 
+  GG.ensureMarkerVisible = function (attempt) {
+    if (!GG.settings.enabled) return;
+    if (!GG.coords.lat || !GG.coords.lng) return;
+
+    let isOnMapView =
+      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
+      document.querySelector(".guess-map_canvas__cvpqv");
+    if (!isOnMapView) return;
+
+    GG.placeMarker();
+
+    if (!GG.marker) {
+      const nextAttempt = (attempt || 0) + 1;
+      if (nextAttempt <= 10) {
+        if (GG.markerRetryId) {
+          clearTimeout(GG.markerRetryId);
+        }
+        GG.markerRetryId = setTimeout(
+          () => GG.ensureMarkerVisible(nextAttempt),
+          300,
+        );
+      }
+    }
+  };
+
   GG.toggleMarker = function () {
     let isOnMapView =
       document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
@@ -181,8 +206,12 @@
     if (!GG.coords.lat || !GG.coords.lng) return;
 
     if (GG.settings.enabled) {
-      GG.placeMarker();
+      GG.ensureMarkerVisible();
     } else {
+      if (GG.markerRetryId) {
+        clearTimeout(GG.markerRetryId);
+        GG.markerRetryId = null;
+      }
       if (GG.marker && GG.marker.setMap) GG.marker.setMap(null);
       let divMarker = document.getElementById("geo-div-marker");
       if (divMarker) divMarker.style.display = "none";
