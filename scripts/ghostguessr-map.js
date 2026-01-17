@@ -182,13 +182,13 @@
 
     if (!GG.marker) {
       const nextAttempt = (attempt || 0) + 1;
-      if (nextAttempt <= 10) {
+      if (nextAttempt <= 30) {
         if (GG.markerRetryId) {
           clearTimeout(GG.markerRetryId);
         }
         GG.markerRetryId = setTimeout(
           () => GG.ensureMarkerVisible(nextAttempt),
-          300,
+          500,
         );
       }
     }
