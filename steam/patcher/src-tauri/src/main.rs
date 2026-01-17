@@ -1,6 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+  fs,
+  path::{Path, PathBuf},
+  time::Duration,
+};
 use tauri::Manager;
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
@@ -18,7 +22,8 @@ use crate::asar::{create_package_with_options, extract_all, list_package, Create
 
 const DEFAULT_RESOURCES_PATH: &str =
   "";
-const DEFAULT_SCRIPT: &str = include_str!("../../../script.js");
+const SCRIPT_URL: &str =
+  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/steam/script.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
@@ -125,7 +130,8 @@ fn patch_inner(
 
   extract_all(&app_asar, &extracted).map_err(|e| format!("Asar extract failed: {e}"))?;
 
-  fs::write(&ghost_script, DEFAULT_SCRIPT)
+  let script = fetch_remote_script()?;
+  fs::write(&ghost_script, script)
     .map_err(|e| format!("Failed to write ghost script: {e}"))?;
 
   patch_main_js(&main_js, enable_devtools)?;
@@ -261,6 +267,26 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
   }
 
   Ok(())
+}
+
+fn fetch_remote_script() -> Result<String, String> {
+  let client = reqwest::blocking::Client::builder()
+    .timeout(Duration::from_secs(10))
+    .build()
+    .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+  let response = client
+    .get(SCRIPT_URL)
+    .send()
+    .map_err(|e| format!("Failed to download script: {e}"))?;
+  if !response.status().is_success() {
+    return Err(format!(
+      "Failed to download script: HTTP {}",
+      response.status()
+    ));
+  }
+  response
+    .text()
+    .map_err(|e| format!("Failed to read script body: {e}"))
 }
 
 fn find_resources_path(input: Option<&str>) -> Option<PathBuf> {

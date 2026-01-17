@@ -17,6 +17,29 @@ const titlebarStatus = document.getElementById("titlebar-status");
 const titlebarStatusText = document.getElementById("titlebar-status-text");
 const statusDot = document.querySelector(".status-dot");
 const logEl = document.getElementById("log");
+const SETTINGS_KEY = "ghostguessr_patcher_settings";
+
+const loadUiSettings = () => {
+  if (!devtoolsToggle) return;
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.enableDevtools === "boolean") {
+      devtoolsToggle.checked = parsed.enableDevtools;
+    }
+  } catch {}
+};
+
+const saveUiSettings = () => {
+  if (!devtoolsToggle) return;
+  try {
+    window.localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ enableDevtools: devtoolsToggle.checked }),
+    );
+  } catch {}
+};
 
 const log = (message, level = "info") => {
   const time = new Date().toLocaleTimeString();
@@ -161,6 +184,10 @@ document.getElementById("patch-btn").addEventListener("click", patch);
 document.getElementById("unpatch-btn").addEventListener("click", unpatch);
 document.getElementById("browse-btn").addEventListener("click", browseDir);
 document.getElementById("clear-log-btn").addEventListener("click", clearLog);
+if (devtoolsToggle) {
+  devtoolsToggle.addEventListener("change", saveUiSettings);
+}
+loadUiSettings();
 
 if (!invoke) {
   setStatus("Tauri runtime missing", "danger");
