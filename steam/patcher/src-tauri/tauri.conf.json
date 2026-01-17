@@ -11,7 +11,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "GhostGuessr Patcher",
+        "title": "GhostGuessr-Patcher",
         "width": 620,
         "height": 420,
         "resizable": false,
@@ -22,9 +22,7 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": [
-        "default"
-      ]
+      "capabilities": ["default"]
     }
   },
   "plugins": {}

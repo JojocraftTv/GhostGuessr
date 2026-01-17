@@ -18,9 +18,9 @@
         GG.ensureMarkerVisible();
       }
 
-      const settingsContainer = document.querySelector(
-        ".game-menu_settingsContainer__NeJu2",
-      );
+      const settingsContainer = GG.getSettingsContainer
+        ? GG.getSettingsContainer()
+        : document.querySelector(".game-menu_settingsContainer__NeJu2");
       if (settingsContainer && settingsContainer.offsetParent !== null) {
         GG.createGhostMarkerSettings();
       }
