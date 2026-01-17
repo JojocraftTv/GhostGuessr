@@ -59,7 +59,10 @@
   GG.createMarker = function () {
     if (!GG.coords.lat || !GG.coords.lng) return;
     GG.gmap = GG.getGoogleMap();
-    if (!GG.gmap) return;
+    if (!GG.gmap) {
+      GG.createDivMarker();
+      return;
+    }
     if (GG.marker) {
       GG.marker.setMap(null);
       GG.marker = null;
