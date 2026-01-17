@@ -20,7 +20,7 @@
             let split = match.split(",");
             GG.coords.lat = Number.parseFloat(split[0]);
             GG.coords.lng = Number.parseFloat(split[1]);
-            if (GG.settings.enabled && GG.gmap) GG.placeMarker();
+            if (GG.settings.enabled) GG.placeMarker();
           }
         } catch (e) {}
       });
