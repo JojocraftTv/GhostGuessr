@@ -1,0 +1,15 @@
+**/node_modules/
+**/dist/
+**/target/
+**/bundle/
+**/.tauri/
+**/.DS_Store
+**/.env
+**/.env.*
+**/*.log
+**/*.pdb
+**/*.exe
+**/*.tmp
+**/*.bak
+**/.idea/
+**/.vscode/
