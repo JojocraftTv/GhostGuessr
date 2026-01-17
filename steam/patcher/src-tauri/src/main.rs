@@ -110,6 +110,7 @@ fn patch_inner(
   let backup = resources.join("app.asar.bak");
   let extracted = resources.join("app.asar.extracted");
   let ghost_script = extracted.join("ghostguessr-preload.js");
+  let index_html = extracted.join("index.html");
   let main_js = extracted.join("main.js");
 
   if !app_asar.exists() {
@@ -135,6 +136,7 @@ fn patch_inner(
     .map_err(|e| format!("Failed to write ghost script: {e}"))?;
 
   patch_main_js(&main_js, enable_devtools)?;
+  patch_index_html(&index_html)?;
 
   let mut options = CreateOptions::new();
   options.unpack_dir = Some("gg-steamworks-fork".to_string());
@@ -277,6 +279,63 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
   if updated != source {
     fs::write(path, updated)
       .map_err(|e| format!("Failed to write main.js: {e}"))?;
+  }
+
+  Ok(())
+}
+
+fn patch_index_html(path: &Path) -> Result<(), String> {
+  if !path.exists() {
+    return Ok(());
+  }
+
+  let source = fs::read_to_string(path)
+    .map_err(|e| format!("Failed to read index.html: {e}"))?;
+
+  let mut updated = String::with_capacity(source.len());
+  let mut rest = source.as_str();
+
+  while let Some(start) = rest.find("<script") {
+    updated.push_str(&rest[..start]);
+    let remaining = &rest[start..];
+    let open_end = match remaining.find('>') {
+      Some(end) => end,
+      None => {
+        updated.push_str(remaining);
+        rest = "";
+        break;
+      }
+    };
+    let open_tag = &remaining[..open_end + 1];
+    let has_ghost = open_tag.contains("ghostguessr");
+    let after_open = &remaining[open_end + 1..];
+    let close_offset = after_open.find("</script>");
+
+    if has_ghost {
+      if let Some(offset) = close_offset {
+        rest = &after_open[offset + "</script>".len()..];
+      } else {
+        rest = after_open;
+      }
+      continue;
+    }
+
+    if let Some(offset) = close_offset {
+      let end = open_end + 1 + offset + "</script>".len();
+      updated.push_str(&remaining[..end]);
+      rest = &remaining[end..];
+    } else {
+      updated.push_str(remaining);
+      rest = "";
+      break;
+    }
+  }
+
+  updated.push_str(rest);
+
+  if updated != source {
+    fs::write(path, updated)
+      .map_err(|e| format!("Failed to write index.html: {e}"))?;
   }
 
   Ok(())
