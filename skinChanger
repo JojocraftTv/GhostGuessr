@@ -1,0 +1,94 @@
+// ==UserScript==
+// @name         GeoGuessr Skin Changer - Raw Version
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @match        https://www.geoguessr.com/*
+// @run-at       document-start
+// @grant        none
+// @inject-into  page
+// ==/UserScript==
+
+(() => {
+  'use strict';
+
+  let userid = null;
+  const TARGET_ORIGIN = 'https://www.geoguessr.com';
+  const TARGET_PATH = '/api/v4/avatar/user';
+  const TARGET_PATH_ID = '/api/v4/avatar/user/';
+  const TARGET_USER_ID = '/api/v4/globetrotter/trip/current';
+  const HARD_CODED_JSON = JSON.stringify({
+    "equipped": [
+    ],
+    "equippedBadge": null
+  });
+
+  function parseUrl(u) {
+    try {
+      return new URL(u, location.origin);
+    } catch {
+      return null;
+    }
+  }
+
+  function isTarget(u, x) {
+    const url = parseUrl(u);
+    return url && url.origin === TARGET_ORIGIN && url.pathname === x;
+  }
+
+  function createJsonResponse() {
+    return Promise.resolve(new Response(HARD_CODED_JSON, {
+      status: 200,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store'
+      }
+    }));
+  }
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    const url = (typeof input === 'string')
+      ? input
+      : (input && typeof input.url === 'string' ? input.url : String(input));
+    if (isTarget(url, TARGET_PATH)) return createJsonResponse();
+    if (userid && url.startsWith(TARGET_ORIGIN + TARGET_PATH_ID + userid)) return createJsonResponse();
+    if (!isTarget(url, TARGET_USER_ID)) return originalFetch(input, init);
+    return originalFetch(input, init).then(async response => {
+      if (!response.ok) return response;
+      try {
+        const data = await response.clone().json();
+        if (data && data.userId) {
+          userid = data.userId;
+        }
+      } catch (error) {}
+      return response;
+    });
+  };
+  const OriginalXHR = window.XMLHttpRequest;
+  function PatchedXHR() {
+    const xhr = new OriginalXHR();
+    let openUrl = '';
+    const origOpen = xhr.open;
+    xhr.open = function (method, url, async, user, password) {
+      openUrl = String(url);
+      return origOpen.call(this, method, url, async, user, password);
+    };
+    const origSend = xhr.send;
+    xhr.send = function (body) {
+      if (!isTarget(openUrl, TARGET_PATH)) return origSend.call(this, body);
+      const respond = () => {
+        const responseText = HARD_CODED_JSON;
+        Object.defineProperty(xhr, 'status', { value: 200 });
+        Object.defineProperty(xhr, 'readyState', { value: 4 });
+        Object.defineProperty(xhr, 'responseText', { value: responseText });
+        Object.defineProperty(xhr, 'response', { value: responseText });
+        xhr.dispatchEvent(new Event('readystatechange'));
+        xhr.dispatchEvent(new Event('load'));
+        xhr.dispatchEvent(new Event('loadend'));
+      };
+      Promise.resolve().then(respond);
+    };
+    return xhr;
+  }
+  window.XMLHttpRequest = PatchedXHR;
+})();
