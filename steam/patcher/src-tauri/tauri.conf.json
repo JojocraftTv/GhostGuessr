@@ -1,0 +1,31 @@
+{
+  "productName": "GhostGuessr Patcher",
+  "version": "1.0.0",
+  "identifier": "de.niceas.ghostguessr-patcher",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "GhostGuessr Patcher",
+        "width": 620,
+        "height": 420,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "devtools": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        "default"
+      ]
+    }
+  },
+  "plugins": {}
+}

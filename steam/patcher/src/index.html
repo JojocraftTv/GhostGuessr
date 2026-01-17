@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GhostGuessr Patcher</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+
+    <div class="titlebar">
+      <div class="titlebar-left">
+        <img class="title-logo" src="./img/GhostGuessr.png" alt="GhostGuessr" />
+        <div class="title-text">GhostGuessr Patcher</div>
+        <div class="titlebar-status" id="titlebar-status">
+          <span class="status-dot"></span>
+          <span class="status-text" id="titlebar-status-text"></span>
+        </div>
+      </div>
+      <div class="titlebar-actions">
+        <button class="titlebar-btn" id="minimize-btn" aria-label="Minimize">
+          –
+        </button>
+        <button class="titlebar-btn danger" id="close-btn" aria-label="Close">
+          ×
+        </button>
+      </div>
+    </div>
+
+    <main class="app">
+      <section class="panel tabs-panel">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="status">Status</button>
+          <button class="tab-btn" data-tab="settings">Settings</button>
+          <button class="btn ghost clear-btn" id="clear-log-btn">Clear</button>
+        </div>
+        <div class="tab-content active" data-tab-content="status">
+          <div class="log" id="log"></div>
+        </div>
+        <div class="tab-content" data-tab-content="settings">
+          <div class="settings-grid">
+            <div class="field">
+              <label for="resources-path">Game Path</label>
+              <div class="input-row tight">
+                <input
+                  id="resources-path"
+                  type="text"
+                  placeholder="\steamapps\common\GeoGuessr Duels"
+                />
+                <button id="browse-btn" class="btn small">Browse</button>
+                <button id="detect-btn" class="btn ghost">Auto Detect</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="devtools-toggle">GeoGuessr DevTools</label>
+              <div class="input-row tight">
+                <label class="toggle">
+                  <input id="devtools-toggle" type="checkbox" />
+                  <span class="toggle-track"></span>
+                  <span class="toggle-label">Enable</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel footer-panel">
+        <a class="footer-link" href="#" id="github-link">
+          <span class="github-icon" aria-hidden="true"></span>
+          GitHub
+        </a>
+        <div class="actions">
+          <button id="patch-btn" class="btn primary">Patch</button>
+          <button id="unpatch-btn" class="btn danger hidden">Uninstall</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="main.js"></script>
+  </body>
+</html>
