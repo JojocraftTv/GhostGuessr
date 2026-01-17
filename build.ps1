@@ -24,7 +24,7 @@ $header = @(
   "// ==UserScript==",
   "// @name         GhostGuessr (Local Build)",
   "// @namespace    http://tampermonkey.net/",
-  "// @version      2.10",
+  "// @version      TestBuild",
   "// @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.",
   "// @author       VellusFox, Niceas",
   "// @match        https://www.geoguessr.com/*",
