@@ -18,25 +18,29 @@
     "ghostguessr-main.js",
   ];
 
-  const injectCode = (code) =>
-    new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.type = "text/javascript";
-      script.textContent = code;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to execute injected code"));
-      (document.head || document.documentElement).appendChild(script);
-      script.remove();
-    });
-
   const loadScript = async (src) => {
     const response = await fetch(src, { cache: "no-cache" });
     if (!response.ok) {
       throw new Error(`Failed to load ${src}: ${response.status}`);
     }
     const code = await response.text();
-    const wrapped = `(() => { ${code}\n })();`;
-    await injectCode(wrapped);
+    const blob = new Blob([code], { type: "text/javascript" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = blobUrl;
+      script.async = false;
+      script.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve(src);
+      };
+      script.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        reject(new Error(`Failed to execute ${src}`));
+      };
+      (document.head || document.documentElement).appendChild(script);
+    });
   };
 
   const loadAllScripts = async () => {
