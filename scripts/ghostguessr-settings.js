@@ -10,6 +10,7 @@
     } else {
       GG.settings = { ...GG.DEFAULT_SETTINGS };
     }
+    GG.settingsLoaded = true;
   };
 
   GG.saveSettings = function () {
@@ -37,4 +38,8 @@
     document.removeEventListener("keydown", GG.handleHotkey, true);
     document.addEventListener("keydown", GG.handleHotkey, true);
   };
+
+  if (!GG.settingsLoaded) {
+    GG.loadSettings();
+  }
 })();
