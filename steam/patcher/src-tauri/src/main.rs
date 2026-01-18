@@ -23,7 +23,7 @@ use crate::asar::{create_package_with_options, extract_all, list_package, Create
 const DEFAULT_RESOURCES_PATH: &str =
   "";
 const SCRIPT_URL: &str =
-  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/test/steam/script.js";
+  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/test/dist/ghostguessr-core.user.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
@@ -109,8 +109,7 @@ fn patch_inner(
   let app_asar = resources.join("app.asar");
   let backup = resources.join("app.asar.bak");
   let extracted = resources.join("app.asar.extracted");
-  let ghost_script = extracted.join("ghostguessr-preload.js");
-  let index_html = extracted.join("index.html");
+  let ghost_script = extracted.join("ghostguessr.user.js");
   let main_js = extracted.join("main.js");
 
   if !app_asar.exists() {
@@ -136,7 +135,6 @@ fn patch_inner(
     .map_err(|e| format!("Failed to write ghost script: {e}"))?;
 
   patch_main_js(&main_js, enable_devtools)?;
-  patch_index_html(&index_html)?;
 
   let mut options = CreateOptions::new();
   options.unpack_dir = Some("gg-steamworks-fork".to_string());
@@ -185,28 +183,11 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
   let header_need = "const { app, BrowserWindow, shell, session } = require(\"electron\");";
   let header_replace = [
     "const { app, BrowserWindow, shell, session } = require(\"electron\");",
+    "const fs = require(\"fs\");",
     "const path = require(\"path\");",
   ].join("\n");
 
-  let load_need = "  mainWindow.loadFile(\"index.html\");";
-
-  let mut updated = source.clone();
-  if !updated.contains("ghostguessr-preload.js") {
-    if !updated.contains(header_need) || !updated.contains(load_need) {
-      return Err("main.js structure not recognized.".to_string());
-    }
-    updated = updated.replace(header_need, &header_replace);
-    if updated.contains("webPreferences: {") {
-      updated = updated.replace(
-        "webPreferences: {",
-        "webPreferences: {\n      preload: path.join(__dirname, \"ghostguessr-preload.js\"),",
-      );
-    } else {
-      return Err("webPreferences block not found.".to_string());
-    }
-  }
-
-  let old_inject_block = [
+  let inject_block = [
     "const buildGhostInject = (raw) => {",
     "  const prefix = `(() => {",
     "  if (window.__ghostguessrInjected) return;",
@@ -226,11 +207,9 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
     "}",
   ].join("\n");
 
-  if updated.contains(&old_inject_block) {
-    updated = updated.replace(&old_inject_block, "");
-  }
-
-  let old_hook_block = [
+  let base_url = "const baseUrl = environments[environment];";
+  let load_need = "  mainWindow.loadFile(\"index.html\");";
+  let hook_block = [
     "  mainWindow.webContents.on(",
     "    \"did-frame-finish-load\",",
     "    (event, isMainFrame, frameProcessId, frameRoutingId) => {",
@@ -256,8 +235,14 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
     "  );",
   ].join("\n");
 
-  if updated.contains(&old_hook_block) {
-    updated = updated.replace(&old_hook_block, "");
+  let mut updated = source.clone();
+  if !updated.contains("ghostguessr.user.js") {
+    if !updated.contains(header_need) || !updated.contains(base_url) || !updated.contains(load_need) {
+      return Err("main.js structure not recognized.".to_string());
+    }
+    updated = updated.replace(header_need, &header_replace);
+    updated = updated.replace(base_url, &format!("{}\n\n{}", base_url, inject_block));
+    updated = updated.replace(load_need, &format!("{}\n\n{}", load_need, hook_block));
   }
 
   if enable_devtools {
@@ -279,63 +264,6 @@ fn patch_main_js(path: &Path, enable_devtools: bool) -> Result<(), String> {
   if updated != source {
     fs::write(path, updated)
       .map_err(|e| format!("Failed to write main.js: {e}"))?;
-  }
-
-  Ok(())
-}
-
-fn patch_index_html(path: &Path) -> Result<(), String> {
-  if !path.exists() {
-    return Ok(());
-  }
-
-  let source = fs::read_to_string(path)
-    .map_err(|e| format!("Failed to read index.html: {e}"))?;
-
-  let mut updated = String::with_capacity(source.len());
-  let mut rest = source.as_str();
-
-  while let Some(start) = rest.find("<script") {
-    updated.push_str(&rest[..start]);
-    let remaining = &rest[start..];
-    let open_end = match remaining.find('>') {
-      Some(end) => end,
-      None => {
-        updated.push_str(remaining);
-        rest = "";
-        break;
-      }
-    };
-    let open_tag = &remaining[..open_end + 1];
-    let has_ghost = open_tag.contains("ghostguessr");
-    let after_open = &remaining[open_end + 1..];
-    let close_offset = after_open.find("</script>");
-
-    if has_ghost {
-      if let Some(offset) = close_offset {
-        rest = &after_open[offset + "</script>".len()..];
-      } else {
-        rest = after_open;
-      }
-      continue;
-    }
-
-    if let Some(offset) = close_offset {
-      let end = open_end + 1 + offset + "</script>".len();
-      updated.push_str(&remaining[..end]);
-      rest = &remaining[end..];
-    } else {
-      updated.push_str(remaining);
-      rest = "";
-      break;
-    }
-  }
-
-  updated.push_str(rest);
-
-  if updated != source {
-    fs::write(path, updated)
-      .map_err(|e| format!("Failed to write index.html: {e}"))?;
   }
 
   Ok(())
@@ -446,10 +374,7 @@ fn to_game_root(resources: &Path) -> PathBuf {
 
 fn is_patched(app_asar: &Path) -> Result<bool, String> {
   let list = list_package(app_asar).map_err(|e| format!("Asar list failed: {e}"))?;
-  Ok(list.iter().any(|line| {
-    let trimmed = line.trim_end();
-    trimmed.ends_with("ghostguessr-preload.js") || trimmed.ends_with("ghostguessr.user.js")
-  }))
+  Ok(list.iter().any(|line| line.trim_end().ends_with("ghostguessr.user.js")))
 }
 
 fn main() {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostGuessr
-// @namespace    http://tampermonkey.net/
-// @version      2.0
+// @namespace    https://github.com/JojocraftTv/GhostGuessr
+// @version      2.1
 // @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.
 // @author       VellusFox, Niceas
 // @match        https://www.geoguessr.com/*
