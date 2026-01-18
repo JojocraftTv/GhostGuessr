@@ -30,7 +30,8 @@
 
   GG.getGoogleMap = function () {
     let container =
-      document.querySelector(".guess-map_canvas__cvpqv") ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
       document.querySelector('[data-qa="guess-map-canvas"]');
     if (!container) return null;
     if (GG.gmap && GG.gmap.getDiv && GG.gmap.getDiv() === container) {
@@ -118,7 +119,8 @@
 
   GG.createDivMarker = function () {
     let container =
-      document.querySelector(".guess-map_canvas__cvpqv") ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
       document.querySelector('[data-qa="guess-map-canvas"]');
     if (!container) return;
     let existing = document.getElementById("geo-div-marker");
@@ -186,8 +188,9 @@
     }
 
     let isOnMapView =
-      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
-      document.querySelector(".guess-map_canvas__cvpqv");
+      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
     if (!isOnMapView) return;
 
     GG.placeMarker();
@@ -210,8 +213,9 @@
     if (!GG.coords.lat || !GG.coords.lng) return;
 
     let isOnMapView =
-      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
-      document.querySelector(".guess-map_canvas__cvpqv");
+      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
     if (!isOnMapView) return;
 
     GG.settings.enabled = !GG.settings.enabled;

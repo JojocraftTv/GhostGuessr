@@ -8,11 +8,13 @@
     GG.setupHotkeyListener();
 
     const checkAndCreate = () => {
-      if (
-        !GG.buttonCreated &&
-        document.querySelector(".styles_columnTwo__kyT60")
-      ) {
-        GG.createToggleButton();
+      if (typeof GG.createToggleButton === "function") {
+        if (!document.querySelector('[data-qa="ghost-marker-toggle"]')) {
+          GG.buttonCreated = false;
+        }
+        if (!GG.buttonCreated) {
+          GG.createToggleButton();
+        }
       }
       if (GG.settings.enabled) {
         GG.ensureMarkerVisible();
@@ -20,7 +22,7 @@
 
       const settingsContainer = GG.getSettingsContainer
         ? GG.getSettingsContainer()
-        : document.querySelector(".game-menu_settingsContainer__NeJu2");
+        : document.querySelector('[class*="game-menu_settingsContainer__"]');
       if (settingsContainer && settingsContainer.offsetParent !== null) {
         GG.createGhostMarkerSettings();
       }
