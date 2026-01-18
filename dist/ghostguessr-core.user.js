@@ -85,7 +85,8 @@
 
   GG.getGoogleMap = function () {
     let container =
-      document.querySelector(".guess-map_canvas__cvpqv") ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
       document.querySelector('[data-qa="guess-map-canvas"]');
     if (!container) return null;
     if (GG.gmap && GG.gmap.getDiv && GG.gmap.getDiv() === container) {
@@ -173,7 +174,8 @@
 
   GG.createDivMarker = function () {
     let container =
-      document.querySelector(".guess-map_canvas__cvpqv") ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
       document.querySelector('[data-qa="guess-map-canvas"]');
     if (!container) return;
     let existing = document.getElementById("geo-div-marker");
@@ -241,8 +243,9 @@
     }
 
     let isOnMapView =
-      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
-      document.querySelector(".guess-map_canvas__cvpqv");
+      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
     if (!isOnMapView) return;
 
     GG.placeMarker();
@@ -265,8 +268,9 @@
     if (!GG.coords.lat || !GG.coords.lng) return;
 
     let isOnMapView =
-      document.querySelector(".coordinate-guess_mapContainer__Y3bUt") ||
-      document.querySelector(".guess-map_canvas__cvpqv");
+      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
+      document.querySelector('[class*="guess-map_canvas__"]') ||
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
     if (!isOnMapView) return;
 
     GG.settings.enabled = !GG.settings.enabled;
@@ -290,6 +294,18 @@
 
   const GG = window.GhostGuessr;
 
+  const hasClassPrefix = (element, prefix) => {
+    if (!element) return false;
+    return Array.from(element.classList).some((name) =>
+      name.startsWith(prefix),
+    );
+  };
+
+  const getClassByPrefix = (element, prefix) => {
+    if (!element) return null;
+    return Array.from(element.classList).find((name) => name.startsWith(prefix));
+  };
+
   GG.createSvg = function (color) {
     return `
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: transparent;">
@@ -301,10 +317,12 @@
 
   GG.getSettingsContainer = function () {
     return (
-      document.querySelector(".duels-settings_columns__At_5b") ||
-      document.querySelector(".settings_root__GebxB .settings_container__54_c3") ||
-      document.querySelector(".settings_sectionContainer__UIjyf") ||
-      document.querySelector(".game-menu_settingsContainer__NeJu2")
+      document.querySelector('[class*="duels-settings_columns__"]') ||
+      document.querySelector(
+        '[class*="settings_root__"] [class*="settings_container__"]',
+      ) ||
+      document.querySelector('[class*="settings_sectionContainer__"]') ||
+      document.querySelector('[class*="game-menu_settingsContainer__"]')
     );
   };
 
@@ -318,18 +336,76 @@
       return;
     }
 
-    let buttonContainer = document.querySelector(".styles_columnTwo__kyT60");
+    let buttonContainer =
+      document.querySelector('[class*="styles_columnTwo__"]') ||
+      document.querySelector(".ghostguessr-columnTwo");
+    let createdColumnTwo = false;
+    if (!buttonContainer) {
+      const controlsRoot =
+        document.querySelector('[class*="styles_root__"]') ||
+        document.querySelector('[class*="game_controls__"]');
+      const columnOne = document.querySelector('[class*="styles_columnOne__"]');
+      if (controlsRoot && columnOne && columnOne.parentNode === controlsRoot) {
+        const columnTwoClass = getClassByPrefix(
+          controlsRoot,
+          "styles_columnTwo__",
+        );
+        buttonContainer = document.createElement("div");
+        buttonContainer.className = columnTwoClass || "ghostguessr-columnTwo";
+        if (!columnTwoClass) {
+          buttonContainer.style.cssText =
+            "display: flex; flex-direction: column; gap: 8px; justify-content: center; align-items: center; margin-left: 8px;";
+        }
+        controlsRoot.insertBefore(buttonContainer, columnOne.nextSibling);
+        createdColumnTwo = true;
+      }
+    }
     if (!buttonContainer) return;
 
+    const sampleButtonInContainer = Array.from(
+      buttonContainer.querySelectorAll("button"),
+    ).find((button) => !button.disabled);
+    const sampleButton =
+      sampleButtonInContainer ||
+      document.querySelector('[data-qa="in-game-settings-button"]') ||
+      document.querySelector('[data-qa="pano-zoom-in"]') ||
+      document.querySelector('[data-qa="pano-zoom-out"]');
+    const sampleControl =
+      (sampleButton &&
+        sampleButton.closest('[class*="styles_control__"]')) ||
+      document.querySelector('[class*="styles_control__"]');
+    const sampleTooltipRef =
+      buttonContainer.querySelector('[class*="tooltip_reference__"]') ||
+      (sampleButton &&
+        sampleButton.closest('[class*="tooltip_reference__"]')) ||
+      document.querySelector('[class*="tooltip_reference__"]');
+    const sampleTooltip =
+      (sampleTooltipRef &&
+        sampleTooltipRef.querySelector('[class*="tooltip_tooltip__"]')) ||
+      buttonContainer.querySelector('[class*="tooltip_tooltip__"]');
+    const sampleTooltipArrow =
+      sampleTooltip && sampleTooltip.querySelector('[class*="tooltip_arrow__"]');
+    const tooltipFromContainer =
+      sampleTooltip && buttonContainer.contains(sampleTooltip);
+
+    if (!GG.toggleActiveClass) {
+      GG.toggleActiveClass = getClassByPrefix(sampleButton, "styles_active__");
+    }
+
     let controlDiv = document.createElement("div");
-    controlDiv.className = "styles_control__Pa4Ta";
+    controlDiv.className = sampleControl
+      ? sampleControl.className
+      : "styles_control__Pa4Ta";
 
     let tooltipRef = document.createElement("span");
-    tooltipRef.className = "tooltip_reference__CwDbn";
+    tooltipRef.className = sampleTooltipRef
+      ? sampleTooltipRef.className
+      : "tooltip_reference__CwDbn";
 
     GG.toggleButton = document.createElement("button");
-    GG.toggleButton.className =
-      "styles_hudButton__kzfFK styles_sizeSmall__O7Bw_ styles_roundBoth__hcuEN";
+    GG.toggleButton.className = sampleButton
+      ? sampleButton.className
+      : "styles_hudButton__kzfFK styles_sizeSmall__O7Bw_ styles_roundBoth__hcuEN";
     GG.toggleButton.setAttribute("data-qa", "ghost-marker-toggle");
 
     let svgContainer = document.createElement("div");
@@ -341,7 +417,9 @@
 
     let tooltip = document.createElement("div");
     tooltip.className =
-      "tooltip_tooltip__3D6bz tooltip_right__wLi_G tooltip_roundnessXS__BGhWu tooltip_variantDefault__7WTJ0 tooltip_hideOnXs__S3erz";
+      sampleTooltip && !createdColumnTwo && tooltipFromContainer
+        ? sampleTooltip.className
+        : "tooltip_tooltip__3D6bz tooltip_right__wLi_G tooltip_roundnessXS__BGhWu tooltip_variantDefault__7WTJ0 tooltip_hideOnXs__S3erz";
     tooltip.style.cssText =
       "top: 50%; transform: translateY(-50%) scale(0); opacity: 0; visibility: hidden; --tooltip-width: none;";
 
@@ -351,7 +429,9 @@
       : `Show ghost marker (${GG.settings.hotkey})`;
 
     let tooltipArrow = document.createElement("div");
-    tooltipArrow.className = "tooltip_arrow__LJ1of";
+    tooltipArrow.className = sampleTooltipArrow
+      ? sampleTooltipArrow.className
+      : "tooltip_arrow__LJ1of";
 
     tooltip.appendChild(tooltipText);
     tooltip.appendChild(tooltipArrow);
@@ -395,26 +475,31 @@
     );
 
     if (GG.settings.enabled) {
-      if (!GG.toggleButton.classList.contains("styles_active__bPW2Y")) {
-        GG.toggleButton.classList.add("styles_active__bPW2Y");
+      if (
+        GG.toggleActiveClass &&
+        !GG.toggleButton.classList.contains(GG.toggleActiveClass)
+      ) {
+        GG.toggleButton.classList.add(GG.toggleActiveClass);
       }
       GG.toggleButton.style.opacity = "1";
       GG.toggleButton.removeAttribute("title");
 
       let tooltipDiv = GG.toggleButton
-        .closest(".tooltip_reference__CwDbn")
-        .querySelector(".tooltip_tooltip__3D6bz div");
+        .closest('[class*="tooltip_reference__"]')
+        .querySelector('[class*="tooltip_tooltip__"] div');
       if (tooltipDiv) {
         tooltipDiv.textContent = `Hide ghost marker (${GG.settings.hotkey})`;
       }
     } else {
-      GG.toggleButton.classList.remove("styles_active__bPW2Y");
+      if (GG.toggleActiveClass) {
+        GG.toggleButton.classList.remove(GG.toggleActiveClass);
+      }
       GG.toggleButton.style.opacity = "0.8";
       GG.toggleButton.removeAttribute("title");
 
       let tooltipDiv = GG.toggleButton
-        .closest(".tooltip_reference__CwDbn")
-        .querySelector(".tooltip_tooltip__3D6bz div");
+        .closest('[class*="tooltip_reference__"]')
+        .querySelector('[class*="tooltip_tooltip__"] div');
       if (tooltipDiv) {
         tooltipDiv.textContent = `Show ghost marker (${GG.settings.hotkey})`;
       }
@@ -428,11 +513,13 @@
       return;
     }
 
-    const isModernSettings = settingsContainer.classList.contains(
-      "settings_container__54_c3",
+    const isModernSettings = hasClassPrefix(
+      settingsContainer,
+      "settings_container__",
     );
-    const isNewSettingsSection = settingsContainer.classList.contains(
-      "settings_sectionContainer__UIjyf",
+    const isNewSettingsSection = hasClassPrefix(
+      settingsContainer,
+      "settings_sectionContainer__",
     );
 
     const useModernStructure = isModernSettings || isNewSettingsSection;
@@ -871,7 +958,7 @@
       ghostSettingsContainer.appendChild(settingsSection);
 
       const existingSections = settingsContainer.querySelectorAll(
-        ".settings-section_root__Wt_cF",
+        '[class*="settings-section_root__"]',
       );
       if (existingSections.length > 0) {
         const lastSection = existingSections[existingSections.length - 1];
@@ -890,13 +977,13 @@
       .querySelectorAll(".ghost-marker-setting")
       .forEach((el) => el.remove());
     const buttonsContainer = settingsContainer.querySelector(
-      ".buttons_buttons__3yvvA",
+      '[class*="buttons_buttons__"]',
     );
     const closeButton = settingsContainer.querySelector(
       'button[class*="button_button"]',
     );
     const dividers = settingsContainer.querySelectorAll(
-      ".game-menu_divider__IhA4t",
+      '[class*="game-menu_divider__"]',
     );
     const lastDivider = dividers[dividers.length - 1] || null;
     const useExistingDivider = Boolean(lastDivider);
@@ -1500,11 +1587,13 @@
     GG.setupHotkeyListener();
 
     const checkAndCreate = () => {
-      if (
-        !GG.buttonCreated &&
-        document.querySelector(".styles_columnTwo__kyT60")
-      ) {
-        GG.createToggleButton();
+      if (typeof GG.createToggleButton === "function") {
+        if (!document.querySelector('[data-qa="ghost-marker-toggle"]')) {
+          GG.buttonCreated = false;
+        }
+        if (!GG.buttonCreated) {
+          GG.createToggleButton();
+        }
       }
       if (GG.settings.enabled) {
         GG.ensureMarkerVisible();
@@ -1512,7 +1601,7 @@
 
       const settingsContainer = GG.getSettingsContainer
         ? GG.getSettingsContainer()
-        : document.querySelector(".game-menu_settingsContainer__NeJu2");
+        : document.querySelector('[class*="game-menu_settingsContainer__"]');
       if (settingsContainer && settingsContainer.offsetParent !== null) {
         GG.createGhostMarkerSettings();
       }
