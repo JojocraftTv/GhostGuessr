@@ -1,6 +1,6 @@
 [package]
-name = "ghostguessr-patcher"
-version = "1.0.0"
+name = "GhostGuessr-Patcher"
+version = "2.0.0"
 edition = "2021"
 
 [package.metadata]

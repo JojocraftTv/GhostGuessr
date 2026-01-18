@@ -20,4 +20,6 @@
   GG.toggleButton = null;
   GG.buttonCreated = false;
   GG.hotkeyInput = null;
+  GG.markerRetryId = null;
+  GG.settingsLoaded = false;
 })();
