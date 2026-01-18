@@ -6,6 +6,9 @@
   GG.initialize = function () {
     GG.loadSettings();
     GG.setupHotkeyListener();
+    if (typeof GG.tryRewardClaims === "function") {
+      GG.tryRewardClaims();
+    }
 
     const checkAndCreate = () => {
       if (typeof GG.createToggleButton === "function") {

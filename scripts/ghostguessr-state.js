@@ -11,6 +11,9 @@
     outlineWidth: 2,
     size: 10,
     hotkey: "1",
+    autoClaimRewards: true,
+    dailyShopNextClaimAt: null,
+    lastClaimedLevel: null,
   };
 
   GG.coords = { lat: 0, lng: 0 };
