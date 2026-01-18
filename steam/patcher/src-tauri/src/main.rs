@@ -23,7 +23,7 @@ use crate::asar::{create_package_with_options, extract_all, list_package, Create
 const DEFAULT_RESOURCES_PATH: &str =
   "";
 const SCRIPT_URL: &str =
-  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/test/dist/ghostguessr-core.user.js";
+  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
