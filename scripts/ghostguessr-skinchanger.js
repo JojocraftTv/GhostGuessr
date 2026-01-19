@@ -97,13 +97,18 @@
               assetsById.clear();
               assetsReadyPromise = null;
               assetsReadyResolve = null;
-              refreshShopData();
+              fetchOwnProfile().then(() => {
+                refreshShopData();
+                refreshAvatarUser();
+              });
               return;
             }
             if (ev.data.type === MSG_TOGGLE) {
               localSaveOnly = !!ev.data.value;
-              refreshShopData();
-              refreshAvatarUser();
+              fetchOwnProfile().then(() => {
+                refreshShopData();
+                refreshAvatarUser();
+              });
             }
           } catch {}
         });
@@ -326,6 +331,39 @@
             markAssetsReady();
             filterSavedEquippedIds();
           } catch {}
+        }
+
+        function fetchOwnProfile() {
+          try {
+            return baseFetch(PROFILES, {
+              method: "GET",
+              headers: {
+                accept: "*/*",
+                "accept-language": "en-US,en;q=0.6",
+                "content-type": "application/json",
+                "x-client": "web",
+                "cache-control": "no-cache",
+                pragma: "no-cache",
+              },
+              mode: "cors",
+              credentials: "include",
+              cache: "reload",
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                try {
+                  const user = data && data.user;
+                  if (!user) return;
+                  if (typeof user.id === "string" && user.id) profileUserId = user.id;
+                  if (typeof user.nick === "string" && user.nick) profileNick = user.nick;
+                  else if (typeof user.userName === "string" && user.userName) profileNick = user.userName;
+                  else if (typeof user.username === "string" && user.username) profileNick = user.username;
+                } catch {}
+              })
+              .catch(() => {});
+          } catch {
+            return Promise.resolve();
+          }
         }
 
         function getSavedIdSet() {
