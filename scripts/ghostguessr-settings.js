@@ -24,7 +24,10 @@
 
   const saveLocalSettings = (value) => {
     try {
-      window.localStorage.setItem("ghostguessr_settings", JSON.stringify(value));
+      window.localStorage.setItem(
+        "ghostguessr_settings",
+        JSON.stringify(value),
+      );
     } catch {}
   };
 
@@ -164,4 +167,77 @@
   if (!GG.settingsLoaded) {
     GG.loadSettings();
   }
+
+  (function () {
+    const STORE_KEY = "gg_avatar_equippedIds_v1";
+    const STORE_TOGGLE = "gg_local_save_only_v1";
+
+    function readStored(key, fallback) {
+      if (hasGMStorage) {
+        try {
+          return GM_getValue(key, fallback);
+        } catch {}
+      }
+      try {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {}
+      return fallback;
+    }
+
+    function writeStored(key, value) {
+      if (hasGMStorage) {
+        try {
+          GM_setValue(key, value);
+          return;
+        } catch {}
+      }
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      } catch {}
+    }
+
+    GG.avatarStorage = {
+      getSaved() {
+        return readStored(STORE_KEY, null);
+      },
+      setSaved(obj) {
+        writeStored(STORE_KEY, obj);
+      },
+      clearSaved() {
+        writeStored(STORE_KEY, null);
+      },
+      getLocalSaveOnly() {
+        return readStored(STORE_TOGGLE, true);
+      },
+      setLocalSaveOnly(value) {
+        writeStored(STORE_TOGGLE, !!value);
+        GG.avatarStorage.sendToggleToPage(!!value);
+      },
+      sendEquippedToPage(ids) {
+        try {
+          window.postMessage(
+            { type: "GG_AVATAR_APPLY_EQUIPPED_IDS", equippedIds: ids },
+            "*",
+          );
+        } catch {}
+      },
+      sendToggleToPage(value) {
+        try {
+          window.postMessage(
+            { type: "GG_AVATAR_LOCAL_SAVE_ONLY", value: !!value },
+            "*",
+          );
+        } catch {}
+      },
+    };
+
+    try {
+      if (typeof unsafeWindow !== "undefined") {
+        unsafeWindow.GG_AvatarLocalSave = GG.avatarStorage;
+      } else {
+        window.GG_AvatarLocalSave = GG.avatarStorage;
+      }
+    } catch {}
+  })();
 })();

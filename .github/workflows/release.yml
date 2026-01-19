@@ -29,5 +29,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            steam/patcher/src-tauri/target/release/ghostguessr-patcher.exe
-            steam/patcher/src-tauri/target/release/bundle/**
+            patcher/src-tauri/target/release/ghostguessr-patcher.exe
+            patcher/src-tauri/target/release/bundle/**

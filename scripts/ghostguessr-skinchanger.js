@@ -1,0 +1,814 @@
+(() => {
+  "use strict";
+
+  const STORE_KEY = "gg_avatar_equippedIds_v1";
+  const STORE_TOGGLE = "gg_local_save_only_v1";
+  const MSG_SAVE = "GG_AVATAR_SAVE_EQUIPPED_IDS";
+  const MSG_APPLY = "GG_AVATAR_APPLY_EQUIPPED_IDS";
+  const MSG_TOGGLE = "GG_AVATAR_LOCAL_SAVE_ONLY";
+  const MSG_HOOK_READY = "GG_AVATAR_HOOK_READY";
+
+  const saved = GM_getValue(STORE_KEY, null);
+  const initialEquipped =
+    saved && Array.isArray(saved.equippedIds) ? saved.equippedIds : [];
+  const initialLocalSaveOnly = GM_getValue(STORE_TOGGLE, true);
+
+  let hookReady = false;
+  window.addEventListener("message", (ev) => {
+    try {
+      if (!ev || !ev.data) return;
+      if (ev.data.type === MSG_HOOK_READY) {
+        hookReady = true;
+        sendToggleToPage(initialLocalSaveOnly);
+        if (initialEquipped.length) sendEquippedToPage(initialEquipped);
+        return;
+      }
+      if (ev.data.type === MSG_SAVE) {
+        const ids = Array.isArray(ev.data.equippedIds)
+          ? ev.data.equippedIds.filter((x) => typeof x === "string")
+          : [];
+        if (!ids.length) return;
+
+        GM_setValue(STORE_KEY, { equippedIds: ids, savedAt: Date.now() });
+        sendEquippedToPage(ids);
+        return;
+      }
+    } catch (e) {}
+  });
+
+  function sendEquippedToPage(ids) {
+    try {
+      window.postMessage({ type: MSG_APPLY, equippedIds: ids }, "*");
+    } catch {}
+  }
+
+  function sendToggleToPage(value) {
+    try {
+      window.postMessage({ type: MSG_TOGGLE, value: !!value }, "*");
+    } catch {}
+  }
+
+  function injectHook() {
+    const hookCode = `
+          (() => {
+            const log = () => {};
+        const MSG_SAVE = ${JSON.stringify(MSG_SAVE)};
+        const MSG_APPLY = ${JSON.stringify(MSG_APPLY)};
+        const MSG_TOGGLE = ${JSON.stringify(MSG_TOGGLE)};
+        const MSG_HOOK_READY = ${JSON.stringify(MSG_HOOK_READY)};
+
+        const SAVE_PATH = "/api/v4/avatar/save";
+        const AVATAR_USER = "/api/v4/avatar/user";
+        const AVATAR_USER_PREFIX = "/api/v4/avatar/user/";
+        const CUSTOMIZATION = "/api/v4/customization";
+        const SHOP_FEATURED = "/api/v4/webshop/featured-deals/world-championship";
+        const SHOP_FEATURED_GENERIC = "/api/v4/webshop/featured-deals";
+        const SHOP_CREATOR = "/api/v4/webshop/creator-shop/products";
+        const SHOP_CONVEYOR = "/api/v4/webshop/conveyor-belt";
+        const PROFILES = "/api/v3/profiles/";
+        const RANKED_TEAMS_PREFIX = "/api/v4/ranked-team-duels/me/teams/";
+        const ELITE_DAYS = "/api/v4/customization/elite-days";
+
+        const initialEquipped = ${JSON.stringify(initialEquipped)};
+        const initialLocalSaveOnly = ${JSON.stringify(initialLocalSaveOnly)};
+
+        let savedEquippedIds = Array.isArray(initialEquipped)
+          ? initialEquipped.filter((x) => typeof x === "string")
+          : [];
+        let localSaveOnly = !!initialLocalSaveOnly;
+        let profileNick = null;
+        let profileUserId = null;
+        const assetsById = new Map();
+        const originalFetch = window.fetch;
+        let baseFetch = originalFetch;
+        let wrappedFetch = null;
+        let assetsReadyResolve = null;
+        let assetsReadyPromise = null;
+
+        window.addEventListener("message", (ev) => {
+          try {
+            if (!ev || !ev.data) return;
+            if (ev.data.type === MSG_APPLY) {
+              const ids = Array.isArray(ev.data.equippedIds)
+                ? ev.data.equippedIds.filter((x) => typeof x === "string")
+                : [];
+              if (arraysEqual(savedEquippedIds, ids)) return;
+              savedEquippedIds = ids;
+              assetsById.clear();
+              assetsReadyPromise = null;
+              assetsReadyResolve = null;
+              refreshShopData();
+              return;
+            }
+            if (ev.data.type === MSG_TOGGLE) {
+              localSaveOnly = !!ev.data.value;
+              refreshShopData();
+              refreshAvatarUser();
+            }
+          } catch {}
+        });
+
+        function toPath(urlLike) {
+          try {
+            return new URL(String(urlLike), location.origin).pathname;
+          } catch {
+            return String(urlLike || "")
+              .replace(location.origin, "")
+              .split("?")[0];
+          }
+        }
+
+        function isPath(urlLike, path) {
+          const p = toPath(urlLike);
+          return p === path || p === path + "/";
+        }
+
+        function isPrefix(urlLike, prefix) {
+          const p = toPath(urlLike);
+          return p.startsWith(prefix);
+        }
+
+        function isSavePath(urlLike) {
+          return isPath(urlLike, SAVE_PATH) || isPrefix(urlLike, SAVE_PATH + "/");
+        }
+
+        function bustUrl(urlLike) {
+          try {
+            const u = new URL(String(urlLike), location.origin);
+            u.searchParams.set("_gg", String(Date.now()));
+            return u.toString();
+          } catch {
+            const s = String(urlLike || "");
+            return s + (s.includes("?") ? "&" : "?") + "_gg=" + Date.now();
+          }
+        }
+
+        function deepForceUnlockedTrue(value) {
+          if (!value || typeof value !== "object") return value;
+          if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) {
+              value[i] = deepForceUnlockedTrue(value[i]);
+            }
+            return value;
+          }
+          for (const k of Object.keys(value)) {
+            if (k === "unlocked") value[k] = true;
+            else value[k] = deepForceUnlockedTrue(value[k]);
+          }
+          return value;
+        }
+
+        function forceEliteOwnership(value) {
+          if (!value || typeof value !== "object") return value;
+          if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) {
+              value[i] = forceEliteOwnership(value[i]);
+            }
+            return value;
+          }
+          if (value.isEliteExclusive === true) value.isEliteExclusive = false;
+          if (value.isOwned === false) value.isOwned = true;
+          if (value.isInUserInventory === false) value.isInUserInventory = true;
+          for (const k of Object.keys(value)) {
+            value[k] = forceEliteOwnership(value[k]);
+          }
+          return value;
+        }
+
+        function forceEmptyRequirements(value) {
+          if (!value || typeof value !== "object") return value;
+          if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) {
+              value[i] = forceEmptyRequirements(value[i]);
+            }
+            return value;
+          }
+          if (Array.isArray(value.requirements)) value.requirements = [];
+          for (const k of Object.keys(value)) {
+            value[k] = forceEmptyRequirements(value[k]);
+          }
+          return value;
+        }
+
+        function getEquippedBorderUrl() {
+          for (const id of savedEquippedIds) {
+            const asset = assetsById.get(id);
+            if (!asset) continue;
+            if (asset.type === "DEFAULT_BORDER" || asset.slot === 22) {
+              if (typeof asset.icon === "string" && asset.icon) return asset.icon;
+            }
+          }
+          return null;
+        }
+
+        function forceEliteProfile(data, url) {
+          if (!data || typeof data !== "object") return;
+          if (!data.user || typeof data.user !== "object") data.user = {};
+
+          if (isPath(url, PROFILES)) {
+            if (typeof data.user.id === "string" && data.user.id) {
+              profileUserId = data.user.id;
+            }
+            if (typeof data.user.nick === "string" && data.user.nick) {
+              profileNick = data.user.nick;
+            } else if (
+              typeof data.user.userName === "string" &&
+              data.user.userName
+            ) {
+              profileNick = data.user.userName;
+            } else if (
+              typeof data.user.username === "string" &&
+              data.user.username
+            ) {
+              profileNick = data.user.username;
+            }
+          }
+
+          if (profileUserId && data.user.id === profileUserId) {
+            data.user.type = "Elite";
+            const borderUrl = getEquippedBorderUrl();
+            if (borderUrl) data.user.borderUrl = borderUrl;
+          }
+        }
+
+        function forceEliteDays() {
+          return 999;
+        }
+
+        function applyRankedTeamBorder(data) {
+          if (!data || typeof data !== "object") return;
+          if (!data.team || !Array.isArray(data.team.members)) return;
+          const borderUrl = getEquippedBorderUrl();
+          if (!borderUrl) return;
+          for (const member of data.team.members) {
+            if (!member) continue;
+            if (profileUserId && member.userId === profileUserId) {
+              member.borderUrl = borderUrl;
+              continue;
+            }
+            if (profileNick && member.nick === profileNick) {
+              member.borderUrl = borderUrl;
+            }
+          }
+        }
+
+        function markAssetsReady() {
+          if (assetsReadyResolve && haveAllSavedAssets()) {
+            assetsReadyResolve(true);
+            assetsReadyResolve = null;
+          }
+        }
+
+        function arraysEqual(a, b) {
+          if (a === b) return true;
+          if (!Array.isArray(a) || !Array.isArray(b)) return false;
+          if (a.length !== b.length) return false;
+          for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+          }
+          return true;
+        }
+
+        function filterSavedEquippedIds() {
+          if (!Array.isArray(savedEquippedIds) || !savedEquippedIds.length) {
+            return;
+          }
+          if (!assetsById.size) return;
+          if (!haveAllSavedAssets()) return;
+          const valid = savedEquippedIds.filter((id) => assetsById.has(id));
+          if (arraysEqual(savedEquippedIds, valid)) return;
+          savedEquippedIds = valid;
+          window.postMessage({ type: MSG_SAVE, equippedIds: valid }, "*");
+        }
+
+        if (savedEquippedIds.length) {
+          refreshShopData();
+          refreshAvatarUser();
+        }
+
+        function collectAssetsFromCustomization(data, filterSet) {
+          try {
+            const seen = new Set();
+
+            function maybeStoreAsset(obj) {
+              if (!obj || typeof obj !== "object") return;
+              const id = obj.id;
+              if (typeof id !== "string") return;
+              if (filterSet && !filterSet.has(id)) return;
+              const looksLikeAsset =
+                typeof obj.slot === "number" ||
+                typeof obj.meshGlb === "string" ||
+                typeof obj.texture === "string" ||
+                typeof obj.icon === "string";
+              if (looksLikeAsset) assetsById.set(id, obj);
+            }
+
+            function walk(obj) {
+              if (!obj || typeof obj !== "object") return;
+              if (seen.has(obj)) return;
+              seen.add(obj);
+
+              if (Array.isArray(obj)) {
+                for (const item of obj) walk(item);
+                return;
+              }
+
+              if (obj.asset) maybeStoreAsset(obj.asset);
+              else maybeStoreAsset(obj);
+
+              for (const key of Object.keys(obj)) {
+                const value = obj[key];
+                if (value && typeof value === "object") walk(value);
+              }
+            }
+
+            walk(data);
+            markAssetsReady();
+            filterSavedEquippedIds();
+          } catch {}
+        }
+
+        function getSavedIdSet() {
+          return new Set(
+            Array.isArray(savedEquippedIds)
+              ? savedEquippedIds.filter((x) => typeof x === "string")
+              : [],
+          );
+        }
+
+        function haveAllSavedAssets() {
+          if (!Array.isArray(savedEquippedIds) || !savedEquippedIds.length) {
+            return false;
+          }
+          for (const id of savedEquippedIds) {
+            if (!assetsById.has(id)) {
+              return false;
+            }
+          }
+          return true;
+        }
+
+        function ensureAssetsReady() {
+          if (haveAllSavedAssets()) return Promise.resolve(true);
+          if (!assetsReadyPromise) {
+            assetsReadyPromise = new Promise((resolve) => {
+              assetsReadyResolve = resolve;
+            });
+            baseFetch(CUSTOMIZATION, { credentials: "include" })
+              .then(async (res) => {
+                try {
+                  const data = await res.clone().json();
+                  deepForceUnlockedTrue(data);
+                  const filterSet = localSaveOnly ? getSavedIdSet() : null;
+                  collectAssetsFromCustomization(data, filterSet);
+                } catch {}
+              })
+              .catch(() => {})
+              .finally(() => {
+                setTimeout(() => {
+                  if (assetsReadyResolve) {
+                    assetsReadyResolve(false);
+                    assetsReadyResolve = null;
+                  }
+                }, 1500);
+              });
+          }
+          return assetsReadyPromise;
+        }
+
+        function refreshShopData() {
+          const bust = "_gg=" + Date.now();
+          const urls = [
+            CUSTOMIZATION,
+            SHOP_FEATURED,
+            SHOP_FEATURED_GENERIC,
+            SHOP_CREATOR,
+            SHOP_CONVEYOR,
+          ].map((u) => (u.includes("?") ? u + "&" + bust : u + "?" + bust));
+
+          const headers = {
+            accept: "*/*",
+            "content-type": "application/json",
+            "x-client": "web",
+            "cache-control": "no-cache",
+            pragma: "no-cache",
+          };
+
+          assetsById.clear();
+          assetsReadyPromise = null;
+          assetsReadyResolve = null;
+
+          for (const u of urls) {
+            baseFetch(u, {
+              method: "GET",
+              headers,
+              mode: "cors",
+              credentials: "include",
+              cache: "reload",
+            })
+              .then(async (res) => {
+                try {
+                  const data = await res.clone().json();
+                  if (localSaveOnly) deepForceUnlockedTrue(data);
+                  const filterSet = localSaveOnly ? getSavedIdSet() : null;
+                  if (
+                    toPath(u) === CUSTOMIZATION ||
+                    toPath(u) === SHOP_FEATURED ||
+                    toPath(u) === SHOP_FEATURED_GENERIC ||
+                    toPath(u) === SHOP_CREATOR ||
+                    toPath(u) === SHOP_CONVEYOR
+                  ) {
+                    collectAssetsFromCustomization(data, filterSet);
+                  }
+                } catch {}
+              })
+              .catch(() => {});
+          }
+        }
+
+        function refreshAvatarUser() {
+          const url = AVATAR_USER;
+          baseFetch(url, {
+            method: "GET",
+            headers: {
+              accept: "*/*",
+              "accept-language": "en-US,en;q=0.6",
+              "content-type": "application/json",
+              "x-client": "web",
+              "cache-control": "no-cache",
+              pragma: "no-cache",
+            },
+            mode: "cors",
+            credentials: "include",
+            cache: "reload",
+          }).catch(() => {});
+        }
+
+        function buildAvatarPayload() {
+          const equipped = [];
+          for (const id of savedEquippedIds) {
+            const asset = assetsById.get(id);
+            if (asset) equipped.push(asset);
+          }
+          return { equipped, equippedBadge: null, borderUrl: getEquippedBorderUrl() };
+        }
+
+        function createJsonResponse(obj) {
+          return new Response(JSON.stringify(obj), {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store, no-cache, must-revalidate",
+              pragma: "no-cache",
+            },
+          });
+        }
+
+        function tryParseEquippedIds(bodyText) {
+          try {
+            const data = JSON.parse(bodyText);
+            const ids =
+              data && Array.isArray(data.equippedIds) ? data.equippedIds : null;
+            return Array.isArray(ids)
+              ? ids.filter((x) => typeof x === "string")
+              : null;
+          } catch {
+            return null;
+          }
+        }
+
+        function makeFetchWrapper() {
+          return async function (input, init) {
+          const url =
+            typeof input === "string"
+              ? input
+              : input && input.url
+                ? input.url
+                : "";
+          const method = String(
+            (init && init.method) || (input && input.method) || "GET",
+          ).toUpperCase();
+          const isAvatarUser =
+            isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
+          if (method === "GET" && isPath(url, ELITE_DAYS)) {
+            return new Response("999", {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+                "cache-control": "no-store, no-cache, must-revalidate",
+                pragma: "no-cache",
+              },
+            });
+          }
+
+          if (localSaveOnly && method !== "GET" && isSavePath(url)) {
+            let bodyText = null;
+            if (init && typeof init.body === "string") bodyText = init.body;
+            else if (input && typeof input.clone === "function") {
+              try {
+                bodyText = await input.clone().text();
+              } catch {}
+            }
+            if (bodyText) {
+              const ids = tryParseEquippedIds(bodyText);
+              if (ids && ids.length) {
+                window.postMessage(
+                  { type: MSG_SAVE, equippedIds: ids },
+                  "*",
+                );
+              }
+            }
+            return new Response(
+              JSON.stringify({ ok: true, blocked: true, localSaved: true }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          if (
+            localSaveOnly &&
+            method === "GET" &&
+            isAvatarUser &&
+            savedEquippedIds.length
+          ) {
+            const ready = await ensureAssetsReady();
+            if (!ready) {
+              return baseFetch.apply(this, arguments);
+            }
+            return createJsonResponse(buildAvatarPayload());
+          }
+
+          if (!localSaveOnly && isAvatarUser) {
+            const headers = new Headers(
+              (init && init.headers) ||
+                (input && input.headers ? input.headers : undefined),
+            );
+            headers.set("cache-control", "no-cache");
+            headers.set("pragma", "no-cache");
+
+            const nextInit = Object.assign({}, init || {});
+            nextInit.method = method;
+            nextInit.cache = "no-store";
+            nextInit.headers = headers;
+
+            return baseFetch(bustUrl(url), nextInit);
+          }
+
+          const res = await baseFetch.apply(this, arguments);
+          try {
+            if (
+              isPath(url, CUSTOMIZATION) ||
+              isPath(url, SHOP_FEATURED) ||
+              isPath(url, SHOP_FEATURED_GENERIC) ||
+              isPath(url, SHOP_CREATOR) ||
+              isPath(url, SHOP_CONVEYOR) ||
+              isPath(url, PROFILES) ||
+              isPath(url, ELITE_DAYS) ||
+              isPrefix(url, RANKED_TEAMS_PREFIX)
+            ) {
+              if (localSaveOnly && isPath(url, PROFILES)) {
+                await ensureAssetsReady();
+              }
+              const clone = res.clone();
+              const text = await clone.text();
+              let data = JSON.parse(text);
+              if (isPath(url, ELITE_DAYS)) data = forceEliteDays();
+              if (localSaveOnly) deepForceUnlockedTrue(data);
+              if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
+              if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
+              if (localSaveOnly && isPrefix(url, PROFILES)) forceEliteProfile(data, url);
+              if (localSaveOnly && isPrefix(url, RANKED_TEAMS_PREFIX)) {
+                await ensureAssetsReady();
+                applyRankedTeamBorder(data);
+              }
+              const filterSet = localSaveOnly ? getSavedIdSet() : null;
+              if (
+                isPath(url, CUSTOMIZATION) ||
+                isPath(url, SHOP_FEATURED) ||
+                isPath(url, SHOP_FEATURED_GENERIC) ||
+                isPath(url, SHOP_CREATOR) ||
+                isPath(url, SHOP_CONVEYOR)
+              ) {
+                collectAssetsFromCustomization(data, filterSet);
+              }
+
+              const headers = new Headers(res.headers);
+              headers.delete("content-length");
+              headers.set("cache-control", "no-store, no-cache, must-revalidate");
+              headers.set("pragma", "no-cache");
+              return new Response(JSON.stringify(data), {
+                status: res.status,
+                statusText: res.statusText,
+                headers,
+              });
+            }
+          } catch {}
+          return res;
+          };
+        }
+
+        function installFetchHook() {
+          if (window.fetch === wrappedFetch) return;
+          wrappedFetch = makeFetchWrapper();
+          window.fetch = wrappedFetch;
+        }
+
+        const origOpen = XMLHttpRequest.prototype.open;
+        const origSend = XMLHttpRequest.prototype.send;
+
+        XMLHttpRequest.prototype.open = function (method, url) {
+          this.__gg_method = String(method || "GET").toUpperCase();
+          let nextUrl = String(url || "");
+          if (isPath(nextUrl, AVATAR_USER) || isPrefix(nextUrl, AVATAR_USER_PREFIX)) {
+            nextUrl = bustUrl(nextUrl);
+          }
+          this.__gg_url = nextUrl;
+          return origOpen.call(this, method, nextUrl, arguments[2], arguments[3], arguments[4]);
+        };
+
+        XMLHttpRequest.prototype.send = function (body) {
+          const sendArgs = arguments;
+          try {
+            const method = this.__gg_method || "GET";
+            const url = this.__gg_url || "";
+
+            if (method === "GET" && isPath(url, ELITE_DAYS)) {
+              const xhr = this;
+              setTimeout(() => {
+                try {
+                  Object.defineProperty(xhr, "readyState", { value: 4 });
+                  Object.defineProperty(xhr, "status", { value: 200 });
+                  Object.defineProperty(xhr, "responseText", { value: "999" });
+                  Object.defineProperty(xhr, "response", { value: "999" });
+                  xhr.dispatchEvent(new Event("readystatechange"));
+                  xhr.dispatchEvent(new Event("load"));
+                  xhr.dispatchEvent(new Event("loadend"));
+                } catch {}
+              }, 0);
+              return;
+            }
+
+            if (localSaveOnly && method !== "GET" && isSavePath(url)) {
+              if (typeof body === "string") {
+                const ids = tryParseEquippedIds(body);
+                if (ids && ids.length) {
+                  window.postMessage(
+                    { type: MSG_SAVE, equippedIds: ids },
+                    "*",
+                  );
+                }
+              }
+              const xhr = this;
+              setTimeout(() => {
+                try {
+                  Object.defineProperty(xhr, "readyState", { value: 4 });
+                  Object.defineProperty(xhr, "status", { value: 200 });
+                  Object.defineProperty(xhr, "responseText", {
+                    value: JSON.stringify({
+                      ok: true,
+                      blocked: true,
+                      localSaved: true,
+                    }),
+                  });
+                  xhr.dispatchEvent(new Event("readystatechange"));
+                  xhr.dispatchEvent(new Event("load"));
+                  xhr.dispatchEvent(new Event("loadend"));
+                } catch {}
+              }, 0);
+              return;
+            }
+
+            if (
+              localSaveOnly &&
+              method === "GET" &&
+              (isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId)) &&
+              savedEquippedIds.length
+            ) {
+              const xhr = this;
+              ensureAssetsReady().then((ready) => {
+                if (!ready) {
+                  origSend.apply(xhr, sendArgs);
+                  return;
+                }
+                const responseText = JSON.stringify(buildAvatarPayload());
+                setTimeout(() => {
+                  try {
+                    Object.defineProperty(xhr, "status", { value: 200 });
+                    Object.defineProperty(xhr, "readyState", { value: 4 });
+                    Object.defineProperty(xhr, "responseText", {
+                      value: responseText,
+                    });
+                    Object.defineProperty(xhr, "response", {
+                      value: responseText,
+                    });
+                    xhr.dispatchEvent(new Event("readystatechange"));
+                    xhr.dispatchEvent(new Event("load"));
+                    xhr.dispatchEvent(new Event("loadend"));
+                  } catch {}
+                }, 0);
+              });
+              return;
+            }
+
+            this.addEventListener("readystatechange", function () {
+              try {
+                if (this.readyState !== 4) return;
+                const rUrl = this.__gg_url || "";
+                if (
+                  !isPath(rUrl, CUSTOMIZATION) &&
+                  !isPath(rUrl, SHOP_FEATURED) &&
+                  !isPath(rUrl, SHOP_FEATURED_GENERIC) &&
+                  !isPath(rUrl, SHOP_CREATOR) &&
+                  !isPath(rUrl, SHOP_CONVEYOR) &&
+                  !isPath(rUrl, PROFILES) &&
+                  !isPath(rUrl, ELITE_DAYS) &&
+                  !isPrefix(rUrl, RANKED_TEAMS_PREFIX)
+                ) {
+                  return;
+                }
+
+              const raw = this.responseText;
+              let data = JSON.parse(raw);
+              if (isPath(rUrl, ELITE_DAYS)) data = forceEliteDays();
+              if (localSaveOnly) deepForceUnlockedTrue(data);
+              if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
+              if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
+              if (localSaveOnly && isPrefix(rUrl, PROFILES)) forceEliteProfile(data, rUrl);
+              if (localSaveOnly && isPrefix(rUrl, RANKED_TEAMS_PREFIX)) {
+                applyRankedTeamBorder(data);
+              }
+              const filterSet = localSaveOnly ? getSavedIdSet() : null;
+              if (
+                isPath(rUrl, CUSTOMIZATION) ||
+                isPath(rUrl, SHOP_FEATURED) ||
+                isPath(rUrl, SHOP_FEATURED_GENERIC) ||
+                isPath(rUrl, SHOP_CREATOR) ||
+                isPath(rUrl, SHOP_CONVEYOR)
+              ) {
+                  collectAssetsFromCustomization(data, filterSet);
+                }
+                const patched = JSON.stringify(data);
+
+                if (patched !== raw) {
+                  this.__gg_patchedText = patched;
+                  Object.defineProperty(this, "responseText", {
+                    configurable: true,
+                    get: () => this.__gg_patchedText,
+                  });
+                  Object.defineProperty(this, "response", {
+                    configurable: true,
+                    get: () => this.__gg_patchedText,
+                  });
+                }
+              } catch {}
+            });
+          } catch {}
+
+          return origSend.apply(this, arguments);
+        };
+
+        installFetchHook();
+        setInterval(installFetchHook, 1000);
+
+        window.__ggShopSkinHookInstalled = true;
+        window.postMessage({ type: MSG_HOOK_READY }, "*");
+      })();
+    `;
+
+    const s = document.createElement("script");
+    s.textContent = hookCode;
+    document.documentElement.appendChild(s);
+    s.remove();
+  }
+
+  injectHook();
+  setTimeout(() => {
+    if (!hookReady) injectHook();
+  }, 1000);
+  let initialEquippedLocal = initialEquipped;
+  let initialLocalSaveOnlyLocal = initialLocalSaveOnly;
+  try {
+    if (window.GhostGuessr && GhostGuessr.avatarStorage) {
+      const s =
+        GhostGuessr.avatarStorage.getSaved &&
+        GhostGuessr.avatarStorage.getSaved();
+      if (s && Array.isArray(s.equippedIds))
+        initialEquippedLocal = s.equippedIds;
+      if (typeof GhostGuessr.avatarStorage.getLocalSaveOnly === "function") {
+        initialLocalSaveOnlyLocal =
+          GhostGuessr.avatarStorage.getLocalSaveOnly();
+      }
+    }
+  } catch {}
+
+  if (initialEquippedLocal.length) sendEquippedToPage(initialEquippedLocal);
+  sendToggleToPage(initialLocalSaveOnlyLocal);
+
+  try {
+    if (
+      window.GhostGuessr &&
+      typeof GhostGuessr.injectSkinchangerToggle === "function"
+    ) {
+      GhostGuessr.injectSkinchangerToggle(initialLocalSaveOnlyLocal);
+    }
+  } catch {}
+})();

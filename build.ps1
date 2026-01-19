@@ -8,6 +8,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $scripts = @(
   "scripts/ghostguessr-state.js",
   "scripts/ghostguessr-utils.js",
+  "scripts/ghostguessr-skinchanger.js",
   "scripts/ghostguessr-map.js",
   "scripts/ghostguessr-ui.js",
   "scripts/ghostguessr-settings.js",
@@ -28,9 +29,13 @@ $header = @(
   "// @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.",
   "// @author       VellusFox, Niceas",
   "// @match        https://www.geoguessr.com/*",
+  "// @run-at       document-start",
+  "// @inject-into  page",
   "// @icon         https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/icons/GhostGuessr.png",
   "// @grant        GM_setValue",
   "// @grant        GM_getValue",
+  "// @downloadURL  https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js",
+  "// @updateURL    https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js",
   "// @license      MIT",
   "// ==/UserScript==",
   ""
