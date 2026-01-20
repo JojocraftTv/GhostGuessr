@@ -4,6 +4,7 @@ use std::{
   fs,
   path::{Path, PathBuf},
   time::Duration,
+  process::Command,
 };
 use tauri::Manager;
 use winreg::enums::HKEY_CURRENT_USER;
@@ -23,7 +24,7 @@ use crate::asar::{create_package_with_options, extract_all, list_package, Create
 const DEFAULT_RESOURCES_PATH: &str =
   "";
 const SCRIPT_URL: &str =
-  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js";
+  "http://localhost:8000/dist/ghostguessr-core.user.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
@@ -103,6 +104,7 @@ fn patch_inner(
   resources_path: Option<String>,
   enable_devtools: bool,
 ) -> Result<String, String> {
+  kill_geoguessr().map_err(|e| format!("Failed to stop GeoGuessr: {e}"))?;
   let resources = find_resources_path(resources_path.as_deref())
     .ok_or_else(|| "Resources path not found. Use the input to set it.".to_string())?;
 
@@ -130,7 +132,11 @@ fn patch_inner(
 
   extract_all(&app_asar, &extracted).map_err(|e| format!("Asar extract failed: {e}"))?;
 
-  let script = fetch_remote_script()?;
+  let mut script = fetch_remote_script()?;
+  let script_hash = compute_string_hash(&script);
+  let hash_inject = format!("try {{ localStorage.setItem('gg_current_script_hash', '{}'); }} catch(e) {{}}\n", script_hash);
+  script.insert_str(0, &hash_inject);
+
   fs::write(&ghost_script, script)
     .map_err(|e| format!("Failed to write ghost script: {e}"))?;
 
@@ -157,6 +163,7 @@ async fn unpatch(resources_path: Option<String>) -> Result<String, String> {
 }
 
 fn unpatch_inner(resources_path: Option<String>) -> Result<String, String> {
+  kill_geoguessr().map_err(|e| format!("Failed to stop GeoGuessr: {e}"))?;
   let resources = find_resources_path(resources_path.as_deref())
     .ok_or_else(|| "Resources path not found. Use the input to set it.".to_string())?;
 
@@ -377,6 +384,141 @@ fn is_patched(app_asar: &Path) -> Result<bool, String> {
   Ok(list.iter().any(|line| line.trim_end().ends_with("ghostguessr.user.js")))
 }
 
+fn kill_geoguessr() -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    let filter = "IMAGENAME eq GeoGuessr.exe";
+    let list_out = Command::new("tasklist")
+      .args(&["/FI", filter, "/NH"])
+      .output()
+      .map_err(|e| format!("Failed to run tasklist: {e}"))?;
+    let stdout = String::from_utf8_lossy(&list_out.stdout).to_string();
+    let l = stdout.to_lowercase();
+    if l.contains("no tasks are running") || !l.contains("geoguessr.exe") {
+      return Ok(());
+    }
+
+    let kill_out = Command::new("taskkill")
+      .args(&["/IM", "GeoGuessr.exe", "/F"])
+      .output()
+      .map_err(|e| format!("Failed to run taskkill: {e}"))?;
+    if kill_out.status.success() {
+      return Ok(());
+    }
+    let so = String::from_utf8_lossy(&kill_out.stdout);
+    let se = String::from_utf8_lossy(&kill_out.stderr);
+    return Err(format!("taskkill failed: {} {}", so, se));
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  {
+    if let Ok(pgrep_out) = Command::new("pgrep").arg("-f").arg("GeoGuessr").output() {
+      if !pgrep_out.stdout.is_empty() {
+        let _ = Command::new("pkill").arg("-f").arg("GeoGuessr").output();
+      }
+    }
+    Ok(())
+  }
+}
+
+use sha2::{Digest, Sha256};
+use std::io::Read;
+
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+  available: bool,
+  url: String,
+  version: String,
+  download_url: Option<String>,
+}
+
+#[tauri::command]
+async fn check_update() -> Result<UpdateInfo, String> {
+  tauri::async_runtime::spawn_blocking(move || check_update_inner())
+    .await
+    .map_err(|e| format!("Update check task failed: {e}"))?
+}
+
+fn check_update_inner() -> Result<UpdateInfo, String> {
+  let current_exe = std::env::current_exe()
+    .map_err(|e| format!("Failed to get current exe path: {e}"))?;
+  
+  let local_hash = compute_file_hash(&current_exe)?;
+  
+  let client = reqwest::blocking::Client::builder()
+    .user_agent("GhostGuessr-Patcher")
+    .timeout(Duration::from_secs(10))
+    .build()
+    .map_err(|e| format!("Client build error: {e}"))?;
+    
+  let resp = client.get("https://api.github.com/repos/JojocraftTv/GhostGuessr/releases/latest")
+    .send()
+    .map_err(|e| format!("GitHub API request failed: {e}"))?;
+    
+  if !resp.status().is_success() {
+    return Err(format!("GitHub API returned {}", resp.status()));
+  }
+  
+  let release: serde_json::Value = resp.json()
+    .map_err(|e| format!("Failed to parse release JSON: {e}"))?;
+    
+  let tag_name = release["tag_name"].as_str().unwrap_or("unknown").to_string();
+  let html_url = release["html_url"].as_str().unwrap_or("").to_string();
+  let assets = release["assets"].as_array().ok_or("No assets found in release")?;
+  
+  let exe_asset = assets.iter().find(|a| {
+    a["name"].as_str().map(|n| n.ends_with(".exe")).unwrap_or(false)
+  });
+  let exe_url = exe_asset.and_then(|a| a["browser_download_url"].as_str()).map(|s| s.to_string());
+  
+  let sha_asset = assets.iter().find(|a| {
+    a["name"].as_str().map(|n| n.ends_with(".sha256") || n.contains("SHA256")).unwrap_or(false)
+  });
+  
+  let mut available = false;
+  
+  if let Some(asset) = sha_asset {
+    if let Some(url) = asset["browser_download_url"].as_str() {
+      if let Ok(hash_resp) = client.get(url).send() {
+        if let Ok(hash_text) = hash_resp.text() {
+          let clean_local = local_hash.trim().to_lowercase();
+          let clean_remote = hash_text.to_lowercase();
+          available = !clean_remote.contains(&clean_local);
+        }
+      }
+    }
+  } else {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let clean_tag = tag_name.trim_start_matches('v');
+    available = clean_tag != current_version;
+  }
+  
+  Ok(UpdateInfo {
+    available,
+    url: html_url,
+    version: tag_name,
+    download_url: exe_url,
+  })
+}
+
+fn compute_file_hash(path: &Path) -> Result<String, String> {
+  let mut file = fs::File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
+  let mut hasher = Sha256::new();
+  let mut buffer = [0; 8192];
+  loop {
+    let count = file.read(&mut buffer).map_err(|e| format!("Failed to read file: {e}"))?;
+    if count == 0 { break; }
+    hasher.update(&buffer[..count]);
+  }
+  Ok(hex::encode(hasher.finalize()))
+}
+
+fn compute_string_hash(content: &str) -> String {
+  let mut hasher = Sha256::new();
+  hasher.update(content.as_bytes());
+  hex::encode(hasher.finalize())
+}
+
 fn main() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
@@ -387,7 +529,8 @@ fn main() {
       minimize_window,
       close_window,
       patch,
-      unpatch
+      unpatch,
+      check_update
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

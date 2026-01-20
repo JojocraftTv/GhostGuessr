@@ -9,9 +9,12 @@ $scripts = @(
   "scripts/ghostguessr-state.js",
   "scripts/ghostguessr-utils.js",
   "scripts/ghostguessr-skinchanger.js",
+  "scripts/ghostguessr-streamer.js",
   "scripts/ghostguessr-map.js",
+  "scripts/ghostguessr-score-predictor.js",
   "scripts/ghostguessr-ui.js",
   "scripts/ghostguessr-settings.js",
+  "scripts/ghostguessr-updater.js",
   "scripts/ghostguessr-main.js"
 )
 

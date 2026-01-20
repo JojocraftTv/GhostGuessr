@@ -2,8 +2,40 @@
   "use strict";
 
   const GG = window.GhostGuessr;
-  const hasGMStorage =
-    typeof GM_getValue === "function" && typeof GM_setValue === "function";
+  const hasGMStorage = GG.hasGMStorage;
+
+  GG.storageGet = function(key, fallback) {
+    if (hasGMStorage) {
+      try {
+        return GM_getValue(key, fallback);
+      } catch (e) {
+        console.warn("[GG Storage] GM_getValue failed:", e);
+      }
+    }
+    try {
+      const raw = window.localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      console.warn("[GG Storage] localStorage.getItem failed:", e);
+      return fallback;
+    }
+  };
+
+  GG.storageSet = function(key, value) {
+    if (hasGMStorage) {
+      try {
+        GM_setValue(key, value);
+        return;
+      } catch (e) {
+        console.warn("[GG Storage] GM_setValue failed:", e);
+      }
+    }
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      console.warn("[GG Storage] localStorage.setItem failed:", e);
+    }
+  };
 
   const normalizeOpacity = (value) => {
     if (typeof value !== "number" || Number.isNaN(value)) return 0.7;
@@ -69,6 +101,8 @@
   };
 
   GG.tryDailyShopClaim = function () {
+    if (GG.isElectron || GG.isSteam) return;
+    
     if (!GG.settings || !GG.settings.autoClaimRewards) return;
     if (GG.dailyShopClaimedThisSession) return;
     if (GG.settings.dailyShopNextClaimAt) {
@@ -97,6 +131,8 @@
   };
 
   GG.tryLevelClaim = function () {
+    if (GG.isElectron || GG.isSteam) return;
+    
     if (!GG.settings || !GG.settings.autoClaimRewards) return;
     if (GG.levelClaimedThisSession) return;
     GG.levelClaimedThisSession = true;

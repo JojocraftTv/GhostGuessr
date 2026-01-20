@@ -17,17 +17,21 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: patcher/src-tauri -> target
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked
 
       - name: Build Tauri app
         run: |
-          cd steam/patcher/src-tauri
+          cd patcher/src-tauri
           cargo tauri build
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            patcher/src-tauri/target/release/ghostguessr-patcher.exe
-            patcher/src-tauri/target/release/bundle/**
+            patcher/src-tauri/target/release/GhostGuessr-Patcher.exe

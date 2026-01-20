@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  if (window.GhostGuessr && window.GhostGuessr.isSteam) {
+    console.log("[GG Skinchanger] Disabled in Electron/Steam environment");
+    return;
+  }
+
   const STORE_KEY = "gg_avatar_equippedIds_v1";
   const STORE_TOGGLE = "gg_local_save_only_v1";
   const MSG_SAVE = "GG_AVATAR_SAVE_EQUIPPED_IDS";
@@ -8,19 +13,77 @@
   const MSG_TOGGLE = "GG_AVATAR_LOCAL_SAVE_ONLY";
   const MSG_HOOK_READY = "GG_AVATAR_HOOK_READY";
 
-  const saved = GM_getValue(STORE_KEY, null);
+  const hasGMStorage =
+    typeof GM_getValue === "function" && typeof GM_setValue === "function";
+
+  function storageGet(key, fallback) {
+    if (hasGMStorage) {
+      try {
+        return GM_getValue(key, fallback);
+      } catch (e) {
+        console.warn("[GG Skinchanger] GM_getValue failed:", e);
+      }
+    }
+    try {
+      const raw = window.localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      console.warn("[GG Skinchanger] localStorage.getItem failed:", e);
+      return fallback;
+    }
+  }
+
+  function storageSet(key, value) {
+    if (hasGMStorage) {
+      try {
+        GM_setValue(key, value);
+        return;
+      } catch (e) {
+        console.warn("[GG Skinchanger] GM_setValue failed:", e);
+      }
+    }
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      console.warn("[GG Skinchanger] localStorage.setItem failed:", e);
+    }
+  }
+
+  const saved = storageGet(STORE_KEY, null);
+  console.log("[GG Skinchanger] Loaded saved data:", saved);
+  console.log("[GG Skinchanger] Saved assets count:", saved && saved.equippedIds ? saved.equippedIds.length : 0);
   const initialEquipped =
     saved && Array.isArray(saved.equippedIds) ? saved.equippedIds : [];
-  const initialLocalSaveOnly = GM_getValue(STORE_TOGGLE, true);
+  const initialLocalSaveOnly = storageGet(STORE_TOGGLE, true);
 
   let hookReady = false;
+  let autoLoadTriggered = false;
+
+  function sendEquippedToPage(ids) {
+    window.postMessage({ type: MSG_APPLY, ids }, "*");
+  }
+
+  function autoLoadSavedAvatars() {
+    if (!hookReady || autoLoadTriggered) return;
+    
+    const savedData = storageGet(STORE_KEY, null);
+    if (savedData && Array.isArray(savedData.equippedIds) && savedData.equippedIds.length > 0) {
+      console.log("[GG Skinchanger] Auto-loading saved avatars:", savedData.equippedIds);
+      
+      setTimeout(() => {
+        sendEquippedToPage(savedData.equippedIds);
+        autoLoadTriggered = true;
+      }, 2000);
+    }
+  }
+
   window.addEventListener("message", (ev) => {
     try {
       if (!ev || !ev.data) return;
       if (ev.data.type === MSG_HOOK_READY) {
         hookReady = true;
         sendToggleToPage(initialLocalSaveOnly);
-        if (initialEquipped.length) sendEquippedToPage(initialEquipped);
+        autoLoadSavedAvatars();
         return;
       }
       if (ev.data.type === MSG_SAVE) {
@@ -29,8 +92,14 @@
           : [];
         if (!ids.length) return;
 
-        GM_setValue(STORE_KEY, { equippedIds: ids, savedAt: Date.now() });
-        sendEquippedToPage(ids);
+        console.log("[GG Skinchanger] Saving equipped IDs:", ids);
+        storageSet(STORE_KEY, { equippedIds: ids, savedAt: Date.now() });
+        
+        window.postMessage({ type: MSG_APPLY, equippedIds: ids }, "*");
+        
+        setTimeout(() => {
+          sendEquippedToPage(ids);
+        }, 100);
         return;
       }
     } catch (e) {}
@@ -51,7 +120,6 @@
   function injectHook() {
     const hookCode = `
           (() => {
-            const log = () => {};
         const MSG_SAVE = ${JSON.stringify(MSG_SAVE)};
         const MSG_APPLY = ${JSON.stringify(MSG_APPLY)};
         const MSG_TOGGLE = ${JSON.stringify(MSG_TOGGLE)};
@@ -93,22 +161,13 @@
                 ? ev.data.equippedIds.filter((x) => typeof x === "string")
                 : [];
               if (arraysEqual(savedEquippedIds, ids)) return;
+              console.log('[GG Skinchanger Hook] Applying equipped IDs:', ids);
               savedEquippedIds = ids;
-              assetsById.clear();
-              assetsReadyPromise = null;
-              assetsReadyResolve = null;
-              fetchOwnProfile().then(() => {
-                refreshShopData();
-                refreshAvatarUser();
-              });
               return;
             }
             if (ev.data.type === MSG_TOGGLE) {
               localSaveOnly = !!ev.data.value;
-              fetchOwnProfile().then(() => {
-                refreshShopData();
-                refreshAvatarUser();
-              });
+              return;
             }
           } catch {}
         });
@@ -282,18 +341,19 @@
           if (!haveAllSavedAssets()) return;
           const valid = savedEquippedIds.filter((id) => assetsById.has(id));
           if (arraysEqual(savedEquippedIds, valid)) return;
+          console.log('[GG Skinchanger Hook] Filtering and saving equipped IDs:', valid);
           savedEquippedIds = valid;
           window.postMessage({ type: MSG_SAVE, equippedIds: valid }, "*");
         }
 
-        if (savedEquippedIds.length) {
-          refreshShopData();
-          refreshAvatarUser();
-        }
+        let isRefreshing = false;
+        let refreshDebounceTimer = null;
 
         function collectAssetsFromCustomization(data, filterSet) {
           try {
             const seen = new Set();
+            let assetCount = 0;
+            const MAX_ASSETS = 2000;
 
             function maybeStoreAsset(obj) {
               if (!obj || typeof obj !== "object") return;
@@ -305,16 +365,25 @@
                 typeof obj.meshGlb === "string" ||
                 typeof obj.texture === "string" ||
                 typeof obj.icon === "string";
-              if (looksLikeAsset) assetsById.set(id, obj);
+              if (looksLikeAsset) {
+                if (assetCount >= MAX_ASSETS) {
+                  console.warn('[GG Skinchanger Hook] Asset limit reached, stopping collection');
+                  return;
+                }
+                assetsById.set(id, obj);
+                assetCount++;
+              }
             }
 
-            function walk(obj) {
+            function walk(obj, depth = 0) {
               if (!obj || typeof obj !== "object") return;
               if (seen.has(obj)) return;
+              if (seen.size > 50000) return;
+              if (depth > 20) return;
               seen.add(obj);
 
               if (Array.isArray(obj)) {
-                for (const item of obj) walk(item);
+                for (const item of obj) walk(item, depth + 1);
                 return;
               }
 
@@ -323,14 +392,17 @@
 
               for (const key of Object.keys(obj)) {
                 const value = obj[key];
-                if (value && typeof value === "object") walk(value);
+                if (value && typeof value === "object") walk(value, depth + 1);
               }
             }
 
             walk(data);
+            console.log('[GG Skinchanger Hook] Collected assets:', assetCount, 'Total in map:', assetsById.size);
             markAssetsReady();
             filterSavedEquippedIds();
-          } catch {}
+          } catch (e) {
+            console.error('[GG Skinchanger Hook] Error collecting assets:', e);
+          }
         }
 
         function fetchOwnProfile() {
@@ -415,6 +487,28 @@
         }
 
         function refreshShopData() {
+          if (isRefreshing) {
+            console.log('[GG Skinchanger Hook] refreshShopData skipped - already refreshing');
+            return;
+          }
+          
+          if (refreshDebounceTimer) {
+            clearTimeout(refreshDebounceTimer);
+          }
+          
+          refreshDebounceTimer = setTimeout(() => {
+            refreshDebounceTimer = null;
+            doRefreshShopData();
+          }, 100);
+        }
+
+        function doRefreshShopData() {
+          if (isRefreshing) {
+            console.log('[GG Skinchanger Hook] doRefreshShopData skipped - already refreshing');
+            return;
+          }
+          
+          isRefreshing = true;
           const bust = "_gg=" + Date.now();
           const urls = [
             CUSTOMIZATION,
@@ -432,9 +526,13 @@
             pragma: "no-cache",
           };
 
+          console.log('[GG Skinchanger Hook] refreshShopData starting, clearing assets. Current count:', assetsById.size);
           assetsById.clear();
           assetsReadyPromise = null;
           assetsReadyResolve = null;
+
+          let completed = 0;
+          const total = urls.length;
 
           for (const u of urls) {
             baseFetch(u, {
@@ -460,7 +558,14 @@
                   }
                 } catch {}
               })
-              .catch(() => {});
+              .catch(() => {})
+              .finally(() => {
+                completed++;
+                if (completed >= total) {
+                  isRefreshing = false;
+                  console.log('[GG Skinchanger Hook] refreshShopData completed');
+                }
+              });
           }
         }
 
@@ -526,6 +631,11 @@
           const method = String(
             (init && init.method) || (input && input.method) || "GET",
           ).toUpperCase();
+          
+          if (url.includes('api/v4') || url.includes('api/v3')) {
+            console.log('[GG Skinchanger Hook] Fetch intercepted:', method, toPath(url), 'localSaveOnly:', localSaveOnly);
+          }
+          
           const isAvatarUser =
             isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
           if (method === "GET" && isPath(url, ELITE_DAYS)) {
@@ -550,6 +660,7 @@
             if (bodyText) {
               const ids = tryParseEquippedIds(bodyText);
               if (ids && ids.length) {
+                console.log('[GG Skinchanger Hook] Intercepted save (fetch), sending to script:', ids);
                 window.postMessage(
                   { type: MSG_SAVE, equippedIds: ids },
                   "*",
@@ -653,6 +764,12 @@
         const origOpen = XMLHttpRequest.prototype.open;
         const origSend = XMLHttpRequest.prototype.send;
 
+        installFetchHook();
+        
+        if (!window.__ggFetchHookInterval) {
+          window.__ggFetchHookInterval = setInterval(installFetchHook, 5000);
+        }
+
         XMLHttpRequest.prototype.open = function (method, url) {
           this.__gg_method = String(method || "GET").toUpperCase();
           let nextUrl = String(url || "");
@@ -689,6 +806,7 @@
               if (typeof body === "string") {
                 const ids = tryParseEquippedIds(body);
                 if (ids && ids.length) {
+                  console.log('[GG Skinchanger Hook] Intercepted save (XHR), sending to script:', ids);
                   window.postMessage(
                     { type: MSG_SAVE, equippedIds: ids },
                     "*",
@@ -803,9 +921,6 @@
 
           return origSend.apply(this, arguments);
         };
-
-        installFetchHook();
-        setInterval(installFetchHook, 1000);
 
         window.__ggShopSkinHookInstalled = true;
         window.postMessage({ type: MSG_HOOK_READY }, "*");
