@@ -637,7 +637,10 @@
           }
           
           const isAvatarUser =
-            isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
+            isPath(url, AVATAR_USER) || 
+            (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId) ||
+            (toPath(url).startsWith(AVATAR_USER_PREFIX) && localSaveOnly);
+
           if (method === "GET" && isPath(url, ELITE_DAYS)) {
             return new Response("999", {
               status: 200,
@@ -924,6 +927,7 @@
 
         window.__ggShopSkinHookInstalled = true;
         window.postMessage({ type: MSG_HOOK_READY }, "*");
+        fetchOwnProfile();
       })();
     `;
 
