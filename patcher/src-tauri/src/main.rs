@@ -23,8 +23,12 @@ use crate::asar::{create_package_with_options, extract_all, list_package, Create
 
 const DEFAULT_RESOURCES_PATH: &str =
   "";
+#[cfg(debug_assertions)]
 const SCRIPT_URL: &str =
-  "https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js";
+  "http://localhost:8000/dist/ghostguessr-core.user.js";
+#[cfg(not(debug_assertions))]
+const SCRIPT_URL: &str =
+  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/ghostguessr-core.user.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
@@ -471,19 +475,21 @@ fn check_update_inner() -> Result<UpdateInfo, String> {
   });
   let exe_url = exe_asset.and_then(|a| a["browser_download_url"].as_str()).map(|s| s.to_string());
   
-  let sha_asset = assets.iter().find(|a| {
-    a["name"].as_str().map(|n| n.ends_with(".sha256") || n.contains("SHA256")).unwrap_or(false)
+  let update_json_asset = assets.iter().find(|a| {
+    a["name"].as_str().map(|n| n == "update.json").unwrap_or(false)
   });
   
   let mut available = false;
   
-  if let Some(asset) = sha_asset {
+  if let Some(asset) = update_json_asset {
     if let Some(url) = asset["browser_download_url"].as_str() {
-      if let Ok(hash_resp) = client.get(url).send() {
-        if let Ok(hash_text) = hash_resp.text() {
-          let clean_local = local_hash.trim().to_lowercase();
-          let clean_remote = hash_text.to_lowercase();
-          available = !clean_remote.contains(&clean_local);
+      if let Ok(json_resp) = client.get(url).send() {
+        if let Ok(json_val) = json_resp.json::<serde_json::Value>() {
+            if let Some(digest) = json_val["digest"].as_str() {
+                let clean_local = format!("sha256:{}", local_hash.trim().to_lowercase());
+                let clean_remote = digest.trim().to_lowercase();
+                available = clean_remote != clean_local;
+            }
         }
       }
     }

@@ -25,13 +25,42 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked
 
+      - name: Update Cargo.toml version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $cargoPath = "patcher/src-tauri/Cargo.toml"
+          $content = Get-Content $cargoPath
+          $content = $content -replace '^version = ".*"$', "version = `"$version`""
+          $content | Set-Content $cargoPath
+          Write-Output "Updated Cargo.toml version to $version"
+
       - name: Build Tauri app
         run: |
           cd patcher/src-tauri
           cargo tauri build
+
+      - name: Generate update.json
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $exePath = "patcher/src-tauri/target/release/GhostGuessr-Patcher.exe"
+          $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
+          $digest = "sha256:$hash"
+          $url = "https://github.com/${{ github.repository }}/releases/download/$version/GhostGuessr-Patcher.exe"
+          
+          $json = @{
+            version = $version
+            url = $url
+            digest = $digest
+          } | ConvertTo-Json
+          
+          $json | Set-Content "update.json"
+          Write-Output "Generated update.json with digest $digest"
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             patcher/src-tauri/target/release/GhostGuessr-Patcher.exe
+            update.json
