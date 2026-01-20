@@ -56,16 +56,15 @@
     scorePredictorElement.id = 'gg-score-predictor';
     scorePredictorElement.style.cssText = `
       position: absolute;
-      bottom: 80px;
+      bottom: 20px;
       left: 20px;
       width: auto;
-      max-height: 40px;
-      background: rgba(0, 0, 0, 0.85);
+      max-height: 20px;
+      background: rgba(0, 0, 0, 0.7);
       color: white;
-      padding: 8px 12px;
       border-radius: 8px;
-      font-family: 'Neo Sans', 'Arial', sans-serif;
-      font-size: 14px;
+      font-family: 'Arial', sans-serif;
+      font-size: 12px;
       font-weight: 600;
       z-index: 1000;
       display: none;
@@ -73,33 +72,44 @@
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
       border: 2px solid rgba(255, 255, 255, 0.2);
       backdrop-filter: blur(10px);
-      overflow: hidden;
+      padding: 6px 12px;
+      align-items: center;
+      gap: 8px;
     `;
 
     const scoreText = document.createElement('span');
     scoreText.id = 'gg-score-text';
     scoreText.style.cssText = `
-      font-size: 20px;
+      font-size: 15px;
       font-weight: 700;
-      margin-right: 8px;
       background: linear-gradient(135deg, #FFD700, #FFA500);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      display: inline-block;
+      white-space: nowrap;
     `;
 
     const distanceText = document.createElement('span');
     distanceText.id = 'gg-distance-text';
     distanceText.style.cssText = `
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.7);
+      font-size: 15px;
+      color: #ffffff;
+      font-weight: 700;
+      white-space: nowrap;
+    `;
+
+    const separator = document.createElement('span');
+    separator.id = 'gg-score-separator';
+    separator.textContent = '|';
+    separator.style.cssText = `
+      color: rgba(255, 255, 255, 0.4);
       font-weight: 400;
-      display: inline-block;
-      vertical-align: middle;
+      font-size: 14px;
+      display: none;
     `;
 
     scorePredictorElement.appendChild(scoreText);
+    scorePredictorElement.appendChild(separator);
     scorePredictorElement.appendChild(distanceText);
   }
 
@@ -117,22 +127,25 @@
 
     const scoreTextEl = document.getElementById('gg-score-text');
     const distanceTextEl = document.getElementById('gg-distance-text');
+    const separatorEl = document.getElementById('gg-score-separator');
     const displayMode = GG.settings.scorePredictorDisplay || 'both';
 
-    if (scoreTextEl && distanceTextEl) {
+    if (scoreTextEl && distanceTextEl && separatorEl) {
       if (displayMode === 'score') {
         scoreTextEl.textContent = `~${score.toLocaleString()}`;
-        scoreTextEl.style.marginRight = '0';
         distanceTextEl.style.display = 'none';
+        separatorEl.style.display = 'none';
       } else if (displayMode === 'distance') {
-        scoreTextEl.textContent = formatDistance(distance);
-        scoreTextEl.style.marginRight = '0';
-        distanceTextEl.style.display = 'none';
-      } else {
-        scoreTextEl.textContent = `~${score.toLocaleString()}`;
-        scoreTextEl.style.marginRight = '8px';
+        scoreTextEl.style.display = 'none';
         distanceTextEl.textContent = formatDistance(distance);
-        distanceTextEl.style.display = 'inline-block';
+        distanceTextEl.style.display = 'block';
+        separatorEl.style.display = 'none';
+      } else {
+        scoreTextEl.style.display = 'block';
+        scoreTextEl.textContent = `~${score.toLocaleString()}`;
+        distanceTextEl.textContent = formatDistance(distance);
+        distanceTextEl.style.display = 'block';
+        separatorEl.style.display = 'block';
       }
 
       if (score >= 4500) {
@@ -149,7 +162,7 @@
       scoreTextEl.style.backgroundClip = 'text';
     }
 
-    scorePredictorElement.style.display = 'block';
+    scorePredictorElement.style.display = 'flex';
 
     if (typeof GG.updateConnectionLine === 'function') {
       GG.updateConnectionLine(guessLat, guessLng);
