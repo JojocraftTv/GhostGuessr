@@ -8,55 +8,78 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: patcher/src-tauri/target
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: patcher/src-tauri -> target
+          workspaces: patcher/src-tauri
+          cache-on-failure: true
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Configure sccache
+        shell: pwsh
+        run: |
+          "RUSTC_WRAPPER=sccache" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SCCACHE_GHA_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Update Cargo.toml version
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
           $cargoPath = "patcher/src-tauri/Cargo.toml"
-          $content = Get-Content $cargoPath
-          $content = $content -replace '^version = ".*"$', "version = `"$version`""
-          $content | Set-Content $cargoPath
-          Write-Output "Updated Cargo.toml version to $version"
+          (Get-Content $cargoPath -Raw) `
+            -replace '(?m)^version\s*=\s*".*"$', "version = `"$version`"" `
+            | Set-Content $cargoPath
+          "Updated Cargo.toml version to $version"
 
-      - name: Build Tauri app
-        run: |
-          cd patcher/src-tauri
-          cargo tauri build
+      - name: Build (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: patcher/src-tauri
+          args: build
 
       - name: Generate update.json
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
+          $tag = "${{ github.ref_name }}"
           $exePath = "patcher/src-tauri/target/release/GhostGuessr-Patcher.exe"
+          if (!(Test-Path $exePath)) { throw "EXE not found at $exePath" }
+
           $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
           $digest = "sha256:$hash"
-          $url = "https://github.com/${{ github.repository }}/releases/download/$version/GhostGuessr-Patcher.exe"
-          
-          $json = @{
-            version = $version
-            url = $url
-            digest = $digest
-          } | ConvertTo-Json
-          
-          $json | Set-Content "update.json"
-          Write-Output "Generated update.json with digest $digest"
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/GhostGuessr-Patcher.exe"
+
+          $obj = [ordered]@{
+            version = $tag
+            url     = $url
+            digest  = $digest
+          }
+
+          ($obj | ConvertTo-Json) | Set-Content "update.json" -Encoding utf8
+          "Generated update.json with digest $digest"
 
       - name: Release
         uses: softprops/action-gh-release@v2
