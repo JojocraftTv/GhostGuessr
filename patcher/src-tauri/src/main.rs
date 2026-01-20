@@ -25,7 +25,10 @@ const DEFAULT_RESOURCES_PATH: &str =
   "";
 #[cfg(debug_assertions)]
 const SCRIPT_URL: &str =
-  "https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js";
+  "http://localhost:8000/dist/ghostguessr-core.user.js";
+#[cfg(not(debug_assertions))]
+const SCRIPT_URL: &str =
+  "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js";
 
 #[tauri::command]
 fn detect_resources_path() -> Option<String> {
