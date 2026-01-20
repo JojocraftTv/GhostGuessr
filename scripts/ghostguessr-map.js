@@ -82,7 +82,12 @@
         let fiber = container[reactKey];
         let current = fiber;
         while (current) {
-          if (current.memoizedProps && current.memoizedProps.map) {
+          if (
+            current.memoizedProps &&
+            current.memoizedProps.map &&
+            typeof current.memoizedProps.map.setCenter === "function" &&
+            typeof current.memoizedProps.map.getDiv === "function"
+          ) {
             GG.gmap = current.memoizedProps.map;
             return GG.gmap;
           }

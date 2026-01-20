@@ -4,7 +4,6 @@
   const GG = window.GhostGuessr;
 
   let scorePredictorElement = null;
-  let guessMarker = null;
 
   function calculateDistance(lat1, lng1, lat2, lng2) {
     try {
@@ -63,7 +62,7 @@
     const mapSize = (GG.currentMapData?.maxErrorDistance || 14916862) / 1000;
     
     const score = Math.round(5000 * Math.exp(-10 * distanceKm / mapSize));
-    return Math.max(0, Math.min(5000, score + 2)); // +2 bc the formula is slightly off
+    return Math.max(0, Math.min(5000, score)); // score can be slightly off
   }
 
   function formatDistance(km) {
