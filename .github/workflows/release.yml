@@ -2,15 +2,10 @@ name: Build and Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 permissions:
   contents: write
-
-concurrency:
-  group: build-release-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,14 +14,11 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -34,14 +26,14 @@ jobs:
           workspaces: patcher/src-tauri
           cache-on-failure: true
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall
 
-      - name: Configure sccache
+      - name: Install Tauri CLI (fast)
         shell: pwsh
-        run: |
-          "RUSTC_WRAPPER=sccache" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "SCCACHE_GHA_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+        run: cargo binstall tauri-cli -y
 
       - name: Update Cargo.toml version
         shell: pwsh
@@ -53,33 +45,23 @@ jobs:
             | Set-Content $cargoPath
           "Updated Cargo.toml version to $version"
 
-      - name: Build (Tauri)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: patcher/src-tauri
-          args: build
+      - name: Build Tauri app
+        shell: pwsh
+        run: |
+          cd patcher/src-tauri
+          cargo tauri build
 
       - name: Generate update.json
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           $exePath = "patcher/src-tauri/target/release/GhostGuessr-Patcher.exe"
-          if (!(Test-Path $exePath)) { throw "EXE not found at $exePath" }
-
           $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
           $digest = "sha256:$hash"
           $url = "https://github.com/${{ github.repository }}/releases/download/$tag/GhostGuessr-Patcher.exe"
 
-          $obj = [ordered]@{
-            version = $tag
-            url     = $url
-            digest  = $digest
-          }
-
-          ($obj | ConvertTo-Json) | Set-Content "update.json" -Encoding utf8
-          "Generated update.json with digest $digest"
+          (@{ version=$tag; url=$url; digest=$digest } | ConvertTo-Json) |
+            Set-Content "update.json" -Encoding utf8
 
       - name: Release
         uses: softprops/action-gh-release@v2

@@ -28,15 +28,42 @@
     return R * c;
   }
 
+
+  let lastGameToken = null;
+  GG.currentMapData = { maxErrorDistance: 14916862 };
+
+  async function fetchMapDetails(token) {
+    if (!token) return;
+    try {
+      const gameResp = await fetch(`https://www.geoguessr.com/api/v3/games/${token}`);
+      if (!gameResp.ok) throw new Error(`Game fetch failed: ${gameResp.status}`);
+      const gameData = await gameResp.json();
+      
+      const mapSlug = gameData.map;
+      if (mapSlug) {
+        const mapResp = await fetch(`https://www.geoguessr.com/api/maps/${mapSlug}`);
+        if (!mapResp.ok) throw new Error(`Map fetch failed: ${mapResp.status}`);
+        const mapData = await mapResp.json();
+        
+        if (mapData && typeof mapData.maxErrorDistance === 'number') {
+          GG.currentMapData.maxErrorDistance = mapData.maxErrorDistance;
+          console.log(`[GG Score Predictor] Map updated: ${mapData.name}, Size: ${mapData.maxErrorDistance}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[GG Score Predictor] Failed to fetch map details:', e);
+      GG.currentMapData.maxErrorDistance = 14916862;
+    }
+  }
+
   function calculateScore(distanceKm) {
     if (distanceKm === 0) return 5000;
     
-    // GeoGuessr uses approximately 2000km for 5000 score decay on World map
-    // Formula: 5000 * e^(-10 * distance / mapSize)
-    // mapSize for World Map is approx 14916.862 km
-    // -10 * distance / 14916.862 = -distance / 1491.6862
-    const score = Math.round(5000 * Math.exp(-distanceKm / 1491.6862));
-    return Math.max(0, Math.min(5000, score));
+    // GeoGuessr Formula: 5000 * e^(-10 * distance / mapSize)
+    const mapSize = (GG.currentMapData?.maxErrorDistance || 14916862) / 1000;
+    
+    const score = Math.round(5000 * Math.exp(-10 * distanceKm / mapSize));
+    return Math.max(0, Math.min(5000, score + 2)); // +2 bc the formula is slightly off
   }
 
   function formatDistance(km) {
@@ -116,6 +143,11 @@
   function updateScorePredictor(guessLat, guessLng) {
     if (!GG.settings.showScorePredictor) return;
 
+    if (GG.currentRoundId && GG.currentRoundId !== lastGameToken) {
+      lastGameToken = GG.currentRoundId;
+      fetchMapDetails(lastGameToken);
+    }
+
     const refLat = GG.initialCoords.lat || GG.coords.lat;
     const refLng = GG.initialCoords.lng || GG.coords.lng;
     if (!refLat || !refLng) return;
@@ -192,8 +224,6 @@
     if (GG._scorePredictorObserver) return;
 
     let updateTimeout = null;
-    let lastUpdateTime = 0;
-    const MIN_UPDATE_INTERVAL = 100;
     let lastBounds = null;
     let lastZoom = null;
 
