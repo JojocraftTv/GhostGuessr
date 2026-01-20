@@ -1,14 +1,17 @@
 // ==UserScript==
 // @name         GhostGuessr
 // @namespace    https://github.com/JojocraftTv/GhostGuessr
-// @version      2.1
+// @version      2.2
 // @description  Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.
 // @author       VellusFox, Niceas
 // @match        https://www.geoguessr.com/*
+// @run-at       document-start
+// @inject-into  page
 // @icon         https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/icons/GhostGuessr.png
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-state.js
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-utils.js
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-map.js
+// @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-skinchanger.js
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-ui.js
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-settings.js
 // @require      https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/scripts/ghostguessr-main.js

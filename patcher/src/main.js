@@ -189,6 +189,28 @@ if (devtoolsToggle) {
 }
 loadUiSettings();
 
+const checkUpdate = async () => {
+  if (!invoke) return;
+  try {
+    const info = await invoke("check_update");
+    if (info.available) {
+      const notifyEl = document.getElementById("update-notification");
+      if (notifyEl) {
+        notifyEl.innerHTML = `New version found: <strong>${info.version}</strong>`;
+        notifyEl.classList.remove("hidden");
+        notifyEl.title = "Click to download";
+        
+        notifyEl.addEventListener("click", () => {
+          const targetUrl = info.url || "https://github.com/JojocraftTv/GhostGuessr/releases";
+          invoke("open_url", { url: targetUrl });
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`Update check failed: ${err}`);
+  }
+};
+
 if (!invoke) {
   setStatus("Tauri runtime missing", "danger");
   log(
@@ -201,6 +223,7 @@ if (!invoke) {
   document.getElementById("browse-btn").disabled = true;
 } else {
   autoDetect();
+  checkUpdate();
 }
 
 document.querySelectorAll(".tab-btn").forEach((button) => {

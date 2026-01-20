@@ -2,8 +2,40 @@
   "use strict";
 
   const GG = window.GhostGuessr;
-  const hasGMStorage =
-    typeof GM_getValue === "function" && typeof GM_setValue === "function";
+  const hasGMStorage = GG.hasGMStorage;
+
+  GG.storageGet = function(key, fallback) {
+    if (hasGMStorage) {
+      try {
+        return GM_getValue(key, fallback);
+      } catch (e) {
+        console.warn("[GG Storage] GM_getValue failed:", e);
+      }
+    }
+    try {
+      const raw = window.localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      console.warn("[GG Storage] localStorage.getItem failed:", e);
+      return fallback;
+    }
+  };
+
+  GG.storageSet = function(key, value) {
+    if (hasGMStorage) {
+      try {
+        GM_setValue(key, value);
+        return;
+      } catch (e) {
+        console.warn("[GG Storage] GM_setValue failed:", e);
+      }
+    }
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      console.warn("[GG Storage] localStorage.setItem failed:", e);
+    }
+  };
 
   const normalizeOpacity = (value) => {
     if (typeof value !== "number" || Number.isNaN(value)) return 0.7;
@@ -24,7 +56,10 @@
 
   const saveLocalSettings = (value) => {
     try {
-      window.localStorage.setItem("ghostguessr_settings", JSON.stringify(value));
+      window.localStorage.setItem(
+        "ghostguessr_settings",
+        JSON.stringify(value),
+      );
     } catch {}
   };
 
@@ -39,6 +74,12 @@
     }
     if (saved) {
       GG.settings = { ...GG.DEFAULT_SETTINGS, ...saved };
+      if (
+        typeof GG.settings.autoClaimRewards !== "boolean" &&
+        typeof saved.autoClaimDailyShop === "boolean"
+      ) {
+        GG.settings.autoClaimRewards = saved.autoClaimDailyShop;
+      }
     } else {
       GG.settings = { ...GG.DEFAULT_SETTINGS };
     }
@@ -57,6 +98,87 @@
     if (GG.marker && GG.settings.enabled) {
       GG.updateMarkerStyle();
     }
+  };
+
+  GG.tryDailyShopClaim = function () {
+    if (GG.isElectron || GG.isSteam) return;
+    
+    if (!GG.settings || !GG.settings.autoClaimRewards) return;
+    if (GG.dailyShopClaimedThisSession) return;
+    if (GG.settings.dailyShopNextClaimAt) {
+      const nextClaimMs = Date.parse(GG.settings.dailyShopNextClaimAt);
+      if (!Number.isNaN(nextClaimMs) && Date.now() < nextClaimMs) {
+        return;
+      }
+    }
+    GG.dailyShopClaimedThisSession = true;
+    fetch("https://www.geoguessr.com/api/v4/webshop/daily-shop-claim", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data && data.nextPossibleClaim) {
+          GG.settings.dailyShopNextClaimAt = data.nextPossibleClaim;
+          GG.saveSettings();
+        }
+      })
+      .catch(() => {});
+  };
+
+  GG.tryLevelClaim = function () {
+    if (GG.isElectron || GG.isSteam) return;
+    
+    if (!GG.settings || !GG.settings.autoClaimRewards) return;
+    if (GG.levelClaimedThisSession) return;
+    GG.levelClaimedThisSession = true;
+    fetch("https://www.geoguessr.com/api/v3/profiles/", {
+      credentials: "include",
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        const user = data && data.user;
+        const progress = user && user.progress;
+        if (!user || !progress) return;
+        const lastClaimed = Number(user.lastClaimedLevel);
+        const currentLevel = Number(progress.level);
+        if (
+          Number.isNaN(lastClaimed) ||
+          Number.isNaN(currentLevel) ||
+          currentLevel <= lastClaimed
+        ) {
+          return;
+        }
+        const claims = [];
+        for (let level = lastClaimed + 1; level <= currentLevel; level += 1) {
+          claims.push(
+            fetch(`https://www.geoguessr.com/api/v4/level/claim/${level}`, {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: "{}",
+            })
+              .then(() => {
+                GG.settings.lastClaimedLevel = level;
+                GG.saveSettings();
+              })
+              .catch(() => {}),
+          );
+        }
+        return Promise.all(claims);
+      })
+      .catch(() => {});
+  };
+
+  GG.tryRewardClaims = function () {
+    GG.tryDailyShopClaim();
+    GG.tryLevelClaim();
   };
 
   GG.handleHotkey = function (event) {
@@ -81,4 +203,77 @@
   if (!GG.settingsLoaded) {
     GG.loadSettings();
   }
+
+  (function () {
+    const STORE_KEY = "gg_avatar_equippedIds_v1";
+    const STORE_TOGGLE = "gg_local_save_only_v1";
+
+    function readStored(key, fallback) {
+      if (hasGMStorage) {
+        try {
+          return GM_getValue(key, fallback);
+        } catch {}
+      }
+      try {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {}
+      return fallback;
+    }
+
+    function writeStored(key, value) {
+      if (hasGMStorage) {
+        try {
+          GM_setValue(key, value);
+          return;
+        } catch {}
+      }
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      } catch {}
+    }
+
+    GG.avatarStorage = {
+      getSaved() {
+        return readStored(STORE_KEY, null);
+      },
+      setSaved(obj) {
+        writeStored(STORE_KEY, obj);
+      },
+      clearSaved() {
+        writeStored(STORE_KEY, null);
+      },
+      getLocalSaveOnly() {
+        return readStored(STORE_TOGGLE, true);
+      },
+      setLocalSaveOnly(value) {
+        writeStored(STORE_TOGGLE, !!value);
+        GG.avatarStorage.sendToggleToPage(!!value);
+      },
+      sendEquippedToPage(ids) {
+        try {
+          window.postMessage(
+            { type: "GG_AVATAR_APPLY_EQUIPPED_IDS", equippedIds: ids },
+            "*",
+          );
+        } catch {}
+      },
+      sendToggleToPage(value) {
+        try {
+          window.postMessage(
+            { type: "GG_AVATAR_LOCAL_SAVE_ONLY", value: !!value },
+            "*",
+          );
+        } catch {}
+      },
+    };
+
+    try {
+      if (typeof unsafeWindow !== "undefined") {
+        unsafeWindow.GG_AvatarLocalSave = GG.avatarStorage;
+      } else {
+        window.GG_AvatarLocalSave = GG.avatarStorage;
+      }
+    } catch {}
+  })();
 })();

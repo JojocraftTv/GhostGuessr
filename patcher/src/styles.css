@@ -208,6 +208,28 @@ h2 {
   bottom: 10px;
 }
 
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.update-notification {
+  font-size: 0.8rem;
+  color: #8df5b4;
+  background: rgba(39, 174, 96, 0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.update-notification:hover {
+  background: rgba(39, 174, 96, 0.3);
+  transform: translateY(-1px);
+}
+
 .tabs-panel {
   padding-bottom: 56px;
 }

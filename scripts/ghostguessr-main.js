@@ -6,10 +6,13 @@
   GG.initialize = function () {
     GG.loadSettings();
     GG.setupHotkeyListener();
+    if (typeof GG.tryRewardClaims === "function") {
+      GG.tryRewardClaims();
+    }
 
     const checkAndCreate = () => {
       if (typeof GG.createToggleButton === "function") {
-        if (!document.querySelector('[data-qa="ghost-marker-toggle"]')) {
+        if (!document.querySelector('[data-qa="ghostguessr-toggle"]')) {
           GG.buttonCreated = false;
         }
         if (!GG.buttonCreated) {
@@ -18,6 +21,10 @@
       }
       if (GG.settings.enabled) {
         GG.ensureMarkerVisible();
+      }
+
+      if (typeof GG.setupScorePredictorListeners === "function") {
+        GG.setupScorePredictorListeners();
       }
 
       const settingsContainer = GG.getSettingsContainer

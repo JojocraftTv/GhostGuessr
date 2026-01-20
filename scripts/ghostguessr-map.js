@@ -3,6 +3,12 @@
 
   const GG = window.GhostGuessr;
 
+  function detectRoundId() {
+    const url = window.location.href;
+    const match = url.match(/\/game\/([^\/]+)/);
+    return match ? match[1] : null;
+  }
+
   const originalOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
     if (
@@ -18,8 +24,38 @@
           if (matches && matches.length > 0) {
             let match = matches[0];
             let split = match.split(",");
-            GG.coords.lat = Number.parseFloat(split[0]);
-            GG.coords.lng = Number.parseFloat(split[1]);
+            const newLat = Number.parseFloat(split[0]);
+            const newLng = Number.parseFloat(split[1]);
+
+            const roundId = detectRoundId();
+            const isGetMetadata = url.includes("GetMetadata");
+
+            if ((roundId && roundId !== GG.currentRoundId) || isGetMetadata) {
+              if (roundId) GG.currentRoundId = roundId;
+              GG.initialCoords.lat = newLat;
+              GG.initialCoords.lng = newLng;
+
+              if (GG.marker) {
+                GG.marker.setMap(null);
+                GG.marker = null;
+              }
+              if (GG.streetviewMarker) {
+                GG.streetviewMarker.setMap(null);
+                GG.streetviewMarker = null;
+              }
+              if (GG.connectionLine) {
+                GG.connectionLine.setMap(null);
+                GG.connectionLine = null;
+              }
+
+              if (GG._scorePredictorObserver) {
+                GG._scorePredictorObserver.disconnect();
+                GG._scorePredictorObserver = null;
+              }
+            }
+
+            GG.coords.lat = newLat;
+            GG.coords.lng = newLng;
             if (GG.settings.enabled && GG.gmap) GG.placeMarker();
           }
         } catch (e) {}
@@ -58,7 +94,7 @@
   };
 
   GG.createMarker = function () {
-    if (!GG.coords.lat || !GG.coords.lng) return;
+    if (!GG.initialCoords.lat || !GG.initialCoords.lng) return;
     GG.gmap = GG.getGoogleMap();
     if (!GG.gmap) return;
     if (GG.marker) {
@@ -67,7 +103,7 @@
     }
     try {
       if (typeof google !== "undefined" && google.maps) {
-        let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
+        let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
         let icon = {
           path: google.maps.SymbolPath.CIRCLE,
           fillColor: GG.hexToRgba(GG.settings.markerColor, GG.settings.opacity),
@@ -115,6 +151,112 @@
         GG.marker.setOpacity(GG.settings.opacity);
       }
     } catch (e) {}
+
+    GG.updateStreetviewMarkerStyle();
+  };
+
+  GG.createStreetviewMarker = function () {
+    if (!GG.coords.lat || !GG.coords.lng) return;
+    GG.gmap = GG.getGoogleMap();
+    if (!GG.gmap) return;
+    if (GG.streetviewMarker) {
+      GG.streetviewMarker.setMap(null);
+      GG.streetviewMarker = null;
+    }
+    try {
+      if (typeof google !== "undefined" && google.maps) {
+        const opacity = GG.settings.streetviewMarkerOpacity ?? GG.settings.opacity;
+        let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
+        let icon = {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: GG.hexToRgba(GG.settings.streetviewMarkerColor, opacity),
+          fillOpacity: 1,
+          strokeColor: GG.settings.streetviewMarkerOutline,
+          strokeWeight: GG.settings.streetviewMarkerOutlineWidth ?? GG.settings.outlineWidth,
+          scale: GG.settings.streetviewMarkerSize,
+        };
+        GG.streetviewMarker = new google.maps.Marker({
+          position: position,
+          map: GG.gmap,
+          icon: icon,
+          opacity: opacity,
+          zIndex: 997,
+          optimized: false,
+          clickable: false,
+          draggable: false,
+        });
+      }
+    } catch (e) {}
+  };
+
+  GG.updateStreetviewMarkerStyle = function () {
+    if (!GG.streetviewMarker || !GG.streetviewMarker.setIcon) return;
+
+    try {
+      if (typeof google !== "undefined" && google.maps) {
+        const opacity = GG.settings.streetviewMarkerOpacity ?? GG.settings.opacity;
+        let icon = {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: GG.hexToRgba(GG.settings.streetviewMarkerColor, opacity),
+          fillOpacity: 1,
+          strokeColor: GG.settings.streetviewMarkerOutline,
+          strokeWeight: GG.settings.streetviewMarkerOutlineWidth ?? GG.settings.outlineWidth,
+          scale: GG.settings.streetviewMarkerSize,
+        };
+        GG.streetviewMarker.setIcon(icon);
+        GG.streetviewMarker.setOpacity(opacity);
+      }
+    } catch (e) {}
+  };
+
+  GG.updateStreetviewMarkerPosition = function () {
+    if (!GG.streetviewMarker) return;
+    if (!GG.coords.lat || !GG.coords.lng) return;
+    try {
+      if (typeof google !== "undefined" && google.maps && GG.streetviewMarker.setPosition) {
+        let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
+        GG.streetviewMarker.setPosition(position);
+      }
+    } catch (e) {}
+  };
+
+  GG.updateConnectionLine = function (guessLat, guessLng) {
+    if (!GG.settings.showConnectionLine) {
+      if (GG.connectionLine) {
+        GG.connectionLine.setMap(null);
+        GG.connectionLine = null;
+      }
+      return;
+    }
+
+    if (!GG.initialCoords.lat || !GG.initialCoords.lng) return;
+    if (!guessLat || !guessLng) return;
+    GG.gmap = GG.getGoogleMap();
+    if (!GG.gmap) return;
+
+    try {
+      if (typeof google !== "undefined" && google.maps) {
+        const path = [
+          new google.maps.LatLng(guessLat, guessLng),
+          new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng),
+        ];
+
+        if (GG.connectionLine) {
+          GG.connectionLine.setPath(path);
+        } else {
+          GG.connectionLine = new google.maps.Polyline({
+            path: path,
+            geodesic: false,
+            strokeColor: GG.settings.markerColor,
+            strokeOpacity: 0.7,
+            strokeWeight: 2,
+            map: GG.gmap,
+            zIndex: 996,
+            clickable: false,
+          });
+        }
+      }
+    } catch (e) {}
   };
 
   GG.createDivMarker = function () {
@@ -154,7 +296,7 @@
   };
 
   GG.placeMarker = function () {
-    if (!GG.coords.lat || !GG.coords.lng) return;
+    if (!GG.initialCoords.lat || !GG.initialCoords.lng) return;
     if (!GG.marker) {
       GG.createMarker();
     } else {
@@ -164,10 +306,18 @@
           google.maps &&
           GG.marker.setPosition
         ) {
-          let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
+          let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
           GG.marker.setPosition(position);
         }
       } catch (e) {}
+    }
+
+    if (GG.settings.showStreetviewMarker && GG.coords.lat && GG.coords.lng) {
+      if (!GG.streetviewMarker) {
+        GG.createStreetviewMarker();
+      } else {
+        GG.updateStreetviewMarkerPosition();
+      }
     }
   };
 
@@ -225,9 +375,13 @@
       GG.placeMarker();
     } else {
       if (GG.marker && GG.marker.setMap) GG.marker.setMap(null);
+      if (GG.streetviewMarker && GG.streetviewMarker.setMap) GG.streetviewMarker.setMap(null);
+      if (GG.connectionLine && GG.connectionLine.setMap) GG.connectionLine.setMap(null);
       let divMarker = document.getElementById("geo-div-marker");
       if (divMarker) divMarker.style.display = "none";
       GG.marker = null;
+      GG.streetviewMarker = null;
+      GG.connectionLine = null;
     }
   };
 })();
