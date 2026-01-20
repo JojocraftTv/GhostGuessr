@@ -53,7 +53,7 @@
       "data:image/svg+xml," +
       encodeURIComponent(
         `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12.5" cy="12.5" r="9" fill="#8b5cf6"/>
+          <circle cx="12.5" cy="12.5" r="9" stroke="#ffffff" stroke-width="2" fill="none"/>
           <path d="M9.5 12.5L11.5 14.5L15.5 10.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>`,
       );
@@ -131,8 +131,8 @@
       "data:image/svg+xml," +
       encodeURIComponent(
         `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12.5" cy="12.5" r="10" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-          <text x="12.5" y="17" text-anchor="middle" font-size="11" fill="#8b5cf6" font-weight="bold">5K</text>
+          <circle cx="12.5" cy="12.5" r="10" stroke="#ffffff" stroke-width="2" fill="none"/>
+          <text x="12.5" y="16" text-anchor="middle" font-size="8" fill="#ffffff" font-weight="bold">5K</text>
         </svg>`,
       );
 
@@ -155,6 +155,10 @@
         const predictor = document.getElementById('gg-score-predictor');
         if (predictor) predictor.style.display = 'none';
       }
+      const displayModeSection = document.getElementById('gg-display-mode-section');
+      if (displayModeSection) {
+        displayModeSection.style.display = checkbox.checked ? 'block' : 'none';
+      }
     });
 
     labelWrap.appendChild(icon);
@@ -174,69 +178,83 @@
     container.style.cssText = "margin-top: 16px;";
 
     const displayModeContainer = document.createElement("div");
-    displayModeContainer.className = "slider-option_wrapper__3gsTQ";
-    displayModeContainer.style.cssText = "margin-bottom: 16px; display: flex; align-items: center; gap: 12px;";
+    displayModeContainer.id = "gg-display-mode-section";
+    displayModeContainer.className = "game-menu_compassContainer__ESwVy";
+    if (!GG.settings.showScorePredictor) {
+      displayModeContainer.style.display = "none";
+    }
 
-    const displayModeIcon = document.createElement("div");
-    displayModeIcon.className = "slider-option_icon__qtnY8";
-    displayModeIcon.style.cssText = "flex-shrink: 0; width: 24px; height: 24px;";
-    displayModeIcon.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="9" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-        <text x="12" y="16" text-anchor="middle" font-size="9" fill="#8b5cf6" font-weight="bold">5K</text>
+    const subHeader = document.createElement("p");
+    subHeader.className = "game-menu_subHeader__Ul5Vl";
+    subHeader.textContent = "Display Mode";
+    displayModeContainer.appendChild(subHeader);
+
+    const switchContainer = document.createElement("div");
+    switchContainer.className = "compass-switch_container__UteW2";
+
+    const icon = document.createElement("img");
+    icon.alt = "Display Mode";
+    icon.loading = "lazy";
+    icon.width = 25;
+    icon.height = 24;
+    icon.decoding = "async";
+    icon.setAttribute("data-nimg", "1");
+    icon.className = "compass-switch_compassIcon__n9OoQ";
+    icon.style.color = "transparent";
+    icon.src = "data:image/svg+xml," + encodeURIComponent(`
+      <svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12.5" cy="12" r="9" stroke="#ffffff" stroke-width="2" fill="none"/>
+        <text x="12.5" y="15" text-anchor="middle" font-size="7" fill="#ffffff" font-weight="bold">5K</text>
       </svg>
-    `;
+    `);
+    switchContainer.appendChild(icon);
 
-    const displayModeLabel = document.createElement("div");
-    displayModeLabel.className = "slider-option_label__HSXrJ";
-    displayModeLabel.style.cssText = "flex: 1; font-size: 14px; color: #fff;";
-    displayModeLabel.textContent = "Display Mode";
+    const switchWrapper = document.createElement("div");
+    switchWrapper.className = "switch_switch__ie6MF switch_horizontal__KO_Qe";
 
-    const displayModeValue = document.createElement("div");
-    displayModeValue.className = "slider-option_value__OM__C";
-    displayModeValue.style.cssText = "flex-shrink: 0;";
+    const options = [
+      { value: "both", label: "Both" },
+      { value: "score", label: "Score" },
+      { value: "distance", label: "Distance" },
+    ];
 
-    const displayModeSelect = document.createElement("select");
-    displayModeSelect.style.cssText = `
-      width: 140px;
-      height: 32px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #8b5cf6;
-      border-radius: 6px;
-      color: #fff;
-      padding: 0 8px;
-      font-size: 14px;
-      cursor: pointer;
-      outline: none;
-    `;
+    options.forEach((opt) => {
+      const switchItem = document.createElement("div");
+      switchItem.className = "switch_switchItem__LQpWl";
 
-    [
-      { value: "both", label: "Score + Distance" },
-      { value: "score", label: "Score Only" },
-      { value: "distance", label: "Distance Only" },
-    ].forEach(opt => {
-      const optionEl = document.createElement("option");
-      optionEl.value = opt.value;
-      optionEl.textContent = opt.label;
-      optionEl.style.background = "#1a1a2e";
-      if (GG.settings.scorePredictorDisplay === opt.value) {
-        optionEl.selected = true;
-      }
-      displayModeSelect.appendChild(optionEl);
+      const background = document.createElement("div");
+      const isSelected = GG.settings.scorePredictorDisplay === opt.value;
+      background.className = "switch_background__M2QFN " + (isSelected ? "switch_show__V6W5T" : "switch_hide__KyksT");
+
+      const label = document.createElement("label");
+      label.className = "switch_label__KrnMF";
+      label.setAttribute("aria-selected", isSelected ? "true" : "false");
+      label.textContent = opt.label;
+
+      switchItem.appendChild(background);
+      switchItem.appendChild(label);
+
+      switchItem.addEventListener("click", () => {
+        GG.settings.scorePredictorDisplay = opt.value;
+        GG.saveSettings();
+
+        switchWrapper.querySelectorAll(".switch_switchItem__LQpWl").forEach((item, i) => {
+          const bg = item.querySelector(".switch_background__M2QFN");
+          const lbl = item.querySelector(".switch_label__KrnMF");
+          const selected = options[i].value === opt.value;
+          bg.className = "switch_background__M2QFN " + (selected ? "switch_show__V6W5T" : "switch_hide__KyksT");
+          lbl.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+      });
+
+      switchWrapper.appendChild(switchItem);
     });
 
-    displayModeSelect.addEventListener("change", function () {
-      GG.settings.scorePredictorDisplay = this.value;
-      GG.saveSettings();
-    });
-
-    displayModeValue.appendChild(displayModeSelect);
-    displayModeContainer.appendChild(displayModeIcon);
-    displayModeContainer.appendChild(displayModeLabel);
-    displayModeContainer.appendChild(displayModeValue);
+    switchContainer.appendChild(switchWrapper);
+    displayModeContainer.appendChild(switchContainer);
     container.appendChild(displayModeContainer);
 
-    const createNativeToggle = (labelTextStr, settingKey, iconSvg) => {
+    const createNativeToggle = (labelTextStr, settingKey, iconSvg, onChange) => {
         const toggleContainer = document.createElement("div");
         toggleContainer.className = "game-menu_optionsContainer__Eafrd";
         toggleContainer.style.transform = "translateX(-2px)";
@@ -283,6 +301,9 @@
       checkbox.addEventListener("change", function () {
         GG.settings[settingKey] = checkbox.checked;
         GG.saveSettings();
+        if (typeof onChange === "function") {
+          onChange(checkbox.checked);
+        }
       });
 
       labelWrap.appendChild(icon);
@@ -297,17 +318,25 @@
 
     container.appendChild(createNativeToggle("Connection Line (Beta)", "showConnectionLine",
       `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <line x1="5" y1="20" x2="20" y2="5" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="5" cy="20" r="3" fill="#8b5cf6"/>
-        <circle cx="20" cy="5" r="3" fill="#8b5cf6"/>
+        <line x1="5" y1="20" x2="20" y2="5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="5" cy="20" r="3" stroke="#ffffff" stroke-width="2" fill="none"/>
+        <circle cx="20" cy="5" r="3" stroke="#ffffff" stroke-width="2" fill="none"/>
       </svg>`
     ));
 
-    container.appendChild(createNativeToggle("Streetview Marker", "showStreetviewMarker",
+    const streetviewMarkerToggle = createNativeToggle("Streetview Marker", "showStreetviewMarker",
       `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12.5" cy="12.5" r="6" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
-      </svg>`
-    ));
+        <circle cx="12.5" cy="12.5" r="6" stroke="#ffffff" stroke-width="2" fill="none"/>
+      </svg>`,
+      (checked) => {
+        const section = document.getElementById("gg-streetview-marker-section");
+        if (section) {
+          section.style.display = checked ? "block" : "none";
+        }
+      }
+    );
+    streetviewMarkerToggle.id = "gg-streetview-marker-toggle";
+    container.appendChild(streetviewMarkerToggle);
 
     const createMarkerSection = (title, titleColor, colorKey, outlineKey, sizeKey, sizeMin, sizeMax, outlineWidthKey, opacityKey) => {
       const section = document.createElement("div");
@@ -531,7 +560,13 @@
     };
 
     container.appendChild(createMarkerSection("Ghost Marker", "#FF0000", "markerColor", "outlineColor", "size", 5, 20, "outlineWidth", "opacity"));
-    container.appendChild(createMarkerSection("Streetview Marker", "#3B82F6", "streetviewMarkerColor", "streetviewMarkerOutline", "streetviewMarkerSize", 3, 15, "streetviewMarkerOutlineWidth", "streetviewMarkerOpacity"));
+    
+    const streetviewMarkerSection = createMarkerSection("Streetview Marker", "#3B82F6", "streetviewMarkerColor", "streetviewMarkerOutline", "streetviewMarkerSize", 3, 15, "streetviewMarkerOutlineWidth", "streetviewMarkerOpacity");
+    streetviewMarkerSection.id = "gg-streetview-marker-section";
+    if (!GG.settings.showStreetviewMarker) {
+      streetviewMarkerSection.style.display = "none";
+    }
+    container.appendChild(streetviewMarkerSection);
 
     return container;
   };
@@ -573,8 +608,8 @@
       "data:image/svg+xml," +
       encodeURIComponent(
         `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12.5" cy="12.5" r="9" fill="#8b5cf6"/>
-          <path d="M8 12.5h3m3 0h3m-6-3v6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="12.5" cy="12.5" r="9" stroke="#ffffff" stroke-width="2" fill="none"/>
+          <path d="M8 12.5h9M12.5 8v9" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
         </svg>`,
       );
 
@@ -1040,10 +1075,11 @@
 
       const hotkeyIcon = document.createElement("div");
       hotkeyIcon.className = "slider-option_icon__qtnY8";
+      hotkeyIcon.style.cssText = "width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;";
       hotkeyIcon.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="6" width="16" height="12" rx="2" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-        <text x="12" y="15" text-anchor="middle" font-family="Arial" font-size="10" fill="#8b5cf6">${GG.settings.hotkey}</text>
+      <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="6" width="16" height="15" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
+        <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
       </svg>
     `;
 
@@ -1206,9 +1242,9 @@
     const hotkeyIcon = document.createElement("div");
     hotkeyIcon.className = "game-menu_icon__qC_vb";
     hotkeyIcon.innerHTML = `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="16" height="12" rx="2" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-                <text x="12" y="15" text-anchor="middle" font-family="Arial" font-size="10" fill="#8b5cf6">${GG.settings.hotkey}</text>
+            <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="16" height="17" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
+                <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
             </svg>
         `;
 
@@ -1241,11 +1277,10 @@
         
         if (saved) {
              hotkeyIcon.innerHTML = `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="4" y="6" width="16" height="12" rx="2" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-                    <text x="12" y="15" text-anchor="middle" font-family="Arial" font-size="10" fill="#8b5cf6">${GG.settings.hotkey}</text>
-                </svg>
-            `;
+             <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="16" height="17" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
+                <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
+            </svg>`;
         }
     };
 
@@ -1435,13 +1470,18 @@
       checkbox.checked = !!savedToggle;
 
       const updateToggleVisuals = () => {
-        labelText.textContent = "Skinchanger";
+        labelText.textContent = "Skinchanger (Beta)";
       };
 
       updateToggleVisuals();
 
       checkbox.addEventListener("change", () => {
         const next = !!checkbox.checked;
+        
+        if (next) {
+          window.postMessage({ type: "GG_AVATAR_STORE_ORIGINAL" }, "*");
+        }
+        
         if (GG.avatarStorage && GG.avatarStorage.setLocalSaveOnly) {
           GG.avatarStorage.setLocalSaveOnly(next);
         } else if (typeof GM_setValue === "function") {
@@ -1449,6 +1489,13 @@
             GM_setValue("gg_local_save_only_v1", next);
           } catch {}
         }
+        
+        window.postMessage({ type: "GG_AVATAR_LOCAL_SAVE_ONLY", value: next }, "*");
+        
+        if (!next) {
+          window.postMessage({ type: "GG_AVATAR_RESTORE_ORIGINAL" }, "*");
+        }
+        
         updateToggleVisuals();
         location.reload();
       });

@@ -12,6 +12,9 @@
   const MSG_APPLY = "GG_AVATAR_APPLY_EQUIPPED_IDS";
   const MSG_TOGGLE = "GG_AVATAR_LOCAL_SAVE_ONLY";
   const MSG_HOOK_READY = "GG_AVATAR_HOOK_READY";
+  const MSG_STORE_ORIGINAL = "GG_AVATAR_STORE_ORIGINAL";
+  const MSG_RESTORE_ORIGINAL = "GG_AVATAR_RESTORE_ORIGINAL";
+  const MSG_REFRESH_AVATAR = "GG_AVATAR_REFRESH";
 
   const hasGMStorage =
     typeof GM_getValue === "function" && typeof GM_setValue === "function";
@@ -117,6 +120,24 @@
     } catch {}
   }
 
+  function sendStoreOriginalToPage() {
+    try {
+      window.postMessage({ type: MSG_STORE_ORIGINAL }, "*");
+    } catch {}
+  }
+
+  function sendRestoreOriginalToPage() {
+    try {
+      window.postMessage({ type: MSG_RESTORE_ORIGINAL }, "*");
+    } catch {}
+  }
+
+  function sendRefreshAvatarToPage() {
+    try {
+      window.postMessage({ type: MSG_REFRESH_AVATAR }, "*");
+    } catch {}
+  }
+
   function injectHook() {
     const hookCode = `
           (() => {
@@ -124,6 +145,9 @@
         const MSG_APPLY = ${JSON.stringify(MSG_APPLY)};
         const MSG_TOGGLE = ${JSON.stringify(MSG_TOGGLE)};
         const MSG_HOOK_READY = ${JSON.stringify(MSG_HOOK_READY)};
+        const MSG_STORE_ORIGINAL = ${JSON.stringify(MSG_STORE_ORIGINAL)};
+        const MSG_RESTORE_ORIGINAL = ${JSON.stringify(MSG_RESTORE_ORIGINAL)};
+        const MSG_REFRESH_AVATAR = ${JSON.stringify(MSG_REFRESH_AVATAR)};
 
         const SAVE_PATH = "/api/v4/avatar/save";
         const AVATAR_USER = "/api/v4/avatar/user";
@@ -152,6 +176,59 @@
         let wrappedFetch = null;
         let assetsReadyResolve = null;
         let assetsReadyPromise = null;
+        let originalAvatarData = null;
+
+        function fetchOriginalAvatarFromServer() {
+          return baseFetch(AVATAR_USER, {
+            method: "GET",
+            headers: {
+              accept: "*/*",
+              "content-type": "application/json",
+              "x-client": "web",
+              "cache-control": "no-cache",
+              pragma: "no-cache",
+            },
+            mode: "cors",
+            credentials: "include",
+            cache: "reload",
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              console.log('[GG Skinchanger Hook] Fetched original avatar from server:', data);
+              return data;
+            })
+            .catch((e) => {
+              console.warn('[GG Skinchanger Hook] Failed to fetch original avatar:', e);
+              return null;
+            });
+        }
+
+        function triggerAvatarRefresh() {
+          console.log('[GG Skinchanger Hook] Triggering avatar refresh via soft navigation');
+          
+          const currentPath = window.location.pathname + window.location.search;
+          
+          if (window.__NEXT_DATA__ && window.next && window.next.router) {
+            try {
+              const router = window.next.router;
+              router.replace(currentPath, undefined, { shallow: false });
+              console.log('[GG Skinchanger Hook] Triggered Next.js router refresh');
+              return;
+            } catch (e) {
+              console.warn('[GG Skinchanger Hook] Next.js router refresh failed:', e);
+            }
+          }
+          
+          try {
+            const currentUrl = window.location.href;
+            window.history.pushState({}, '', currentPath + (currentPath.includes('?') ? '&' : '?') + '_gg_refresh=' + Date.now());
+            window.history.replaceState({}, '', currentUrl);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+            console.log('[GG Skinchanger Hook] Triggered popstate refresh');
+          } catch (e) {
+            console.warn('[GG Skinchanger Hook] Popstate refresh failed:', e);
+          }
+        }
 
         window.addEventListener("message", (ev) => {
           try {
@@ -166,7 +243,32 @@
               return;
             }
             if (ev.data.type === MSG_TOGGLE) {
-              localSaveOnly = !!ev.data.value;
+              const newValue = !!ev.data.value;
+              const wasEnabled = localSaveOnly;
+              localSaveOnly = newValue;
+              console.log('[GG Skinchanger Hook] Toggle changed:', { wasEnabled, newValue });
+              triggerAvatarRefresh();
+              return;
+            }
+            if (ev.data.type === MSG_STORE_ORIGINAL) {
+              fetchOriginalAvatarFromServer().then((data) => {
+                if (data) {
+                  originalAvatarData = data;
+                  console.log('[GG Skinchanger Hook] Stored original avatar data:', originalAvatarData);
+                  window.postMessage({ type: 'GG_AVATAR_ORIGINAL_STORED', success: true }, '*');
+                }
+              });
+              return;
+            }
+            if (ev.data.type === MSG_RESTORE_ORIGINAL) {
+              if (originalAvatarData) {
+                console.log('[GG Skinchanger Hook] Restoring original avatar:', originalAvatarData);
+              }
+              triggerAvatarRefresh();
+              return;
+            }
+            if (ev.data.type === MSG_REFRESH_AVATAR) {
+              triggerAvatarRefresh();
               return;
             }
           } catch {}
@@ -689,7 +791,12 @@
             return createJsonResponse(buildAvatarPayload());
           }
 
-          if (!localSaveOnly && isAvatarUser) {
+          if (!localSaveOnly && isAvatarUser && method === "GET") {
+            if (originalAvatarData) {
+              console.log('[GG Skinchanger Hook] Returning stored original avatar data');
+              return createJsonResponse(originalAvatarData);
+            }
+            
             const headers = new Headers(
               (init && init.headers) ||
                 (input && input.headers ? input.headers : undefined),
@@ -865,6 +972,33 @@
                   } catch {}
                 }, 0);
               });
+              return;
+            }
+
+            if (
+              !localSaveOnly &&
+              method === "GET" &&
+              (isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId)) &&
+              originalAvatarData
+            ) {
+              const xhr = this;
+              const responseText = JSON.stringify(originalAvatarData);
+              console.log('[GG Skinchanger Hook] XHR returning original avatar data');
+              setTimeout(() => {
+                try {
+                  Object.defineProperty(xhr, "status", { value: 200 });
+                  Object.defineProperty(xhr, "readyState", { value: 4 });
+                  Object.defineProperty(xhr, "responseText", {
+                    value: responseText,
+                  });
+                  Object.defineProperty(xhr, "response", {
+                    value: responseText,
+                  });
+                  xhr.dispatchEvent(new Event("readystatechange"));
+                  xhr.dispatchEvent(new Event("load"));
+                  xhr.dispatchEvent(new Event("loadend"));
+                } catch {}
+              }, 0);
               return;
             }
 
