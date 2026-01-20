@@ -138,7 +138,7 @@
 
     const labelText = document.createElement("div");
     labelText.className = "game-options_optionLabel__Vk5xN";
-    labelText.textContent = "Score Predictor (Beta)";
+    labelText.textContent = "Score Predictor";
 
     const inputWrap = document.createElement("div");
     inputWrap.className = "game-options_optionInput__paPBZ";
@@ -607,6 +607,52 @@
     toggleContainer.appendChild(option);
 
     return toggleContainer;
+  };
+
+  GG.showNotification = function(message, type = 'info', duration = 5000) {
+    const id = 'gg-notification-' + Date.now();
+    const banner = document.createElement('div');
+    banner.id = id;
+    
+    const colors = {
+        info: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        error: 'linear-gradient(135deg, #ff9966 0%, #ff5e62 100%)',
+        success: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
+    };
+
+    banner.style.cssText = `
+      position: fixed;
+      top: 80px;
+      left: 20px;
+      width: auto;
+      max-width: 350px;
+      background: ${colors[type] || colors.info};
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 2147483647;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-family: 'Neo Sans', sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      animation: slideDown 0.3s ease-out;
+      border-radius: 8px;
+      pointer-events: auto;
+      border: 1px solid rgba(255,255,255,0.2);
+    `;
+    
+    banner.textContent = message;
+    document.body.appendChild(banner);
+
+    if (duration > 0) {
+        setTimeout(() => {
+            banner.style.opacity = '0';
+            banner.style.transition = 'opacity 0.5s';
+            setTimeout(() => banner.remove(), 500);
+        }, duration);
+    }
   };
 
   GG.showUpdateNotification = function(newHash) {

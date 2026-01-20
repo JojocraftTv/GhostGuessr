@@ -35,13 +35,8 @@
       }
     };
 
-    let checkTimer = null;
     const scheduleCheck = () => {
-      if (checkTimer) return;
-      checkTimer = setTimeout(() => {
-        checkTimer = null;
-        checkAndCreate();
-      }, 20);
+      checkAndCreate();
     };
 
     checkAndCreate();
