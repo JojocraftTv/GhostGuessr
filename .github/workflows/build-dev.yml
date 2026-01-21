@@ -40,28 +40,39 @@ jobs:
         run: pnpm build
 
       - name: Copy build output to dist/dev
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
           mkdir -p dist/dev
+          rm -f dist/dev/*.user.js dist/dev/*.map || true
 
-          rm -f dist/dev/*.user.js dist/dev/*.map 2>/dev/null || true
-
+          # Core build -> dist/dev
           cp -f dist/ghostguessr-core.user.js dist/dev/ghostguessr-core.user.js
 
+          # Proxy build (if present) -> dist/dev AND root convenience file
           if [ -f "dist/ghostguessr-core.proxy.user.js" ]; then
-            cp -f dist/ghostguessr-core.proxy.user.js ../../GhostGuessr.dev.user.js
+            cp -f dist/ghostguessr-core.proxy.user.js dist/dev/ghostguessr-core.proxy.user.js
+            cp -f dist/ghostguessr-core.proxy.user.js GhostGuessr.dev.user.js
           else
-            echo "No proxy userscript found (dist/ghostguessr-core.proxy.user.js). Skipping GhostGuessr.user.js"
+            echo "No proxy userscript found: dist/ghostguessr-core.proxy.user.js"
           fi
 
-      - name: Replace localhost URL with production URL
+      - name: Replace localhost URL in dev proxy (if present)
+        shell: bash
         run: |
-          sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/dev/ghostguessr-core.user.js|g' GhostGuessr.user.js
+          set -euo pipefail
 
+          if [ -f "GhostGuessr.dev.user.js" ]; then
+            sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/dev/ghostguessr-core.user.js|g' GhostGuessr.dev.user.js
+          else
+            echo "GhostGuessr.dev.user.js not found, skipping sed"
+          fi
 
       - name: Commit dist/dev
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           if ! git status --porcelain | grep -q .; then
             echo "No changes to commit"
@@ -72,7 +83,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add -f dist/dev/ghostguessr-core.user.js
-          git add -f GhostGuessr.dev.user.js 2>/dev/null || true
+
+          if [ -f "dist/dev/ghostguessr-core.proxy.user.js" ]; then
+            git add -f dist/dev/ghostguessr-core.proxy.user.js
+          fi
+          if [ -f "GhostGuessr.dev.user.js" ]; then
+            git add -f GhostGuessr.dev.user.js
+          fi
 
           if git diff --cached --quiet; then
             echo "No dev dist changes"
