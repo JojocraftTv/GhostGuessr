@@ -38,7 +38,7 @@ jobs:
 
       - name: Install patcher dependencies
         working-directory: src/patcher
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Update Cargo.toml version
         shell: pwsh
@@ -49,7 +49,7 @@ jobs:
             -replace '(?m)^version\s*=\s*".*"$', "version = `"$version`"" `
             | Set-Content $cargoPath
           "Updated Cargo.toml version to $version"
-          
+
       - name: Build Tauri app
         working-directory: src/patcher
         run: pnpm build
