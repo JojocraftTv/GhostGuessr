@@ -10,6 +10,6 @@
 // @inject-into page
 // @license MIT
 // @namespace https://github.com/JojocraftTv/GhostGuessr
-// @require http://localhost:8080/ghostguessr-core.user.js
+// @require https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js
 // @run-at document-start
 // ==/UserScript==
