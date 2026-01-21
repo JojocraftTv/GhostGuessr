@@ -321,7 +321,14 @@
         <line x1="5" y1="20" x2="20" y2="5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
         <circle cx="5" cy="20" r="3" stroke="#ffffff" stroke-width="2" fill="none"/>
         <circle cx="20" cy="5" r="3" stroke="#ffffff" stroke-width="2" fill="none"/>
-      </svg>`
+      </svg>`,
+      (checked) => {
+        if (!checked && typeof GG.updateConnectionLine === 'function') {
+          GG.updateConnectionLine(null, null);
+        } else if (checked && typeof GG.checkScorePredictor === 'function') {
+          setTimeout(() => GG.checkScorePredictor(), 100);
+        }
+      }
     ));
 
     const streetviewMarkerToggle = createNativeToggle("Streetview Marker", "showStreetviewMarker",
