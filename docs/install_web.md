@@ -53,7 +53,7 @@ First, you need to install Tampermonkey if you haven't already.
 
 ### Step 2: Install GhostGuessr Script
 
-1. Click this install link: **[Install GhostGuessr](https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/script.user.js)**
+1. Click this install link: **[Install GhostGuessr](https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/GhostGuessr.user.js)**
 2. Tampermonkey will open automatically
 3. Click **"Install"** to confirm
 4. The script is now installed and active!
@@ -70,15 +70,15 @@ First, you need to install Tampermonkey if you haven't already.
 
 ### Script not working?
 
-- ✓ Make sure Tampermonkey is enabled
-- ✓ Check that the GhostGuessr script is enabled in Tampermonkey dashboard
-- ✓ Try refreshing the GeoGuessr page
-- ✓ Clear your browser cache and reload
+- Make sure Tampermonkey is enabled
+- Check that the GhostGuessr script is enabled in Tampermonkey dashboard
+- Try refreshing the GeoGuessr page
+- Clear your browser cache and reload
 
 ### Tampermonkey icon not visible?
 
-- ✓ Click the puzzle piece icon in your toolbar
-- ✓ Pin Tampermonkey to make it always visible
+- Click the puzzle piece icon in your toolbar
+- Pin Tampermonkey to make it always visible
 
 ### Still having issues?
 

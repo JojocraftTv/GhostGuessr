@@ -1,0 +1,10 @@
+import './state.js';
+import './utils.js';
+import './skinchanger.js';
+import './streamer.js';
+import './map.js';
+import './score-predictor.js';
+import './ui.js';
+import './settings.js';
+import './updater.js';
+import './main.js';

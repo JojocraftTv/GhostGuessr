@@ -9,7 +9,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: ${{ github.workspace }}\patcher\src-tauri\target
+  CARGO_TARGET_DIR: ${{ github.workspace }}\src\patcher\src-tauri\target
 
 jobs:
   build:
@@ -24,40 +24,43 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            patcher/src-tauri
+            src/patcher/src-tauri
           cache-on-failure: true
 
-      - name: Install cargo-binstall
-        uses: taiki-e/install-action@v2
+      - uses: pnpm/action-setup@v2
         with:
-          tool: cargo-binstall
+          version: 8
 
-      - name: Install Tauri CLI (fast)
-        shell: pwsh
-        run: cargo binstall tauri-cli -y
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "pnpm"
+
+      - name: Install patcher dependencies
+        working-directory: src/patcher
+        run: pnpm install --frozen-lockfile
 
       - name: Update Cargo.toml version
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $cargoPath = Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri/Cargo.toml"
+          $cargoPath = Join-Path $env:GITHUB_WORKSPACE "src/patcher/src-tauri/Cargo.toml"
           (Get-Content $cargoPath -Raw) `
             -replace '(?m)^version\s*=\s*".*"$', "version = `"$version`"" `
             | Set-Content $cargoPath
           "Updated Cargo.toml version to $version"
-
+          
       - name: Build Tauri app
-        shell: pwsh
-        run: |
-          cd (Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri")
-          cargo tauri build
+        working-directory: src/patcher
+        run: pnpm build
 
       - name: Generate update.json
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
 
-          $releaseDir = Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri/target/release"
+          $releaseDir = Join-Path $env:CARGO_TARGET_DIR "release"
+          if (!(Test-Path $releaseDir)) { throw "Release dir not found: $releaseDir" }
 
           $exePath = Join-Path $releaseDir "GhostGuessr-Patcher.exe"
 
@@ -82,5 +85,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            patcher/src-tauri/target/release/*.exe
+            src/patcher/src-tauri/target/release/*.exe
             update.json
