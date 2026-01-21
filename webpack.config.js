@@ -9,7 +9,7 @@ module.exports = (env, argv) => {
   return {
     entry: './src/userscript/index.js',
     output: {
-      path: path.resolve(__dirname, 'dist'),
+      path: path.resolve(__dirname, isDev ? 'dist/local' : 'dist'),
       filename: 'ghostguessr-core.user.js',
     },
     module: {
