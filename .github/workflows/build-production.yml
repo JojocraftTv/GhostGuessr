@@ -1,10 +1,9 @@
-name: Build Production
+name: Build Production (publish to dist/production)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version number (e.g., 2.3.1)"
         required: false
         type: string
 
@@ -28,57 +27,54 @@ jobs:
           node-version: "18"
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm install
+      - run: pnpm install
 
-      - name: Update version if provided
-        if: ${{ inputs.version != '' }}
+      - if: ${{ inputs.version != '' }}
+        shell: bash
         run: |
           set -e
-
           npm version "${{ inputs.version }}" --allow-same-version --no-git-tag-version
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add package.json pnpm-lock.yaml
-
-          if git diff --cached --quiet; then
-            echo "No version-related changes to commit."
-            exit 0
-          fi
-
+          git diff --cached --quiet && exit 0
           git commit -m "chore: bump version to ${{ inputs.version }}"
           git push origin HEAD:${{ github.ref_name }}
 
-      - name: Build production version
-        run: pnpm build
+      - run: pnpm build
 
-      - name: Copy proxy script to GhostGuessr.user.js (if exists)
+      - shell: bash
         run: |
-          cp -f dist/ghostguessr-core.proxy.user.js GhostGuessr.user.js 2>/dev/null || true
+          set -euo pipefail
+          OUT=".publish/production"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
 
-      - name: Replace localhost URL and version in GhostGuessr.user.js
-        run: |
+          cp -f dist/ghostguessr-core.user.js "$OUT/ghostguessr-core.user.js"
+
+          if [ -f "dist/ghostguessr-core.proxy.user.js" ]; then
+            cp -f dist/ghostguessr-core.proxy.user.js "$OUT/GhostGuessr.user.js"
+          fi
+
           VERSION=$(node -p "require('./package.json').version")
-          sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js|g' GhostGuessr.user.js
-          sed -i "s|\[version\]|$VERSION|g" GhostGuessr.user.js
 
-      - name: Commit production build
-        run: |
-          set -e
+          if [ -f "$OUT/GhostGuessr.user.js" ]; then
+            sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/dist/production/ghostguessr-core.user.js|g' "$OUT/GhostGuessr.user.js"
+            sed -i "s|\[version\]|$VERSION|g" "$OUT/GhostGuessr.user.js"
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add -f dist/ghostguessr-core.user.js
-          git add -f GhostGuessr.user.js 2>/dev/null || true
+          git fetch origin dist
+          git checkout dist
 
-          if git diff --cached --quiet; then
-            echo "No dist changes"
-            exit 0
-          fi
+          rm -rf production dev GhostGuessr*.user.js || true
+          mkdir -p production
+          cp -f "$OUT/"* production/
 
-          VERSION=$(node -p "require('./package.json').version")
-          git commit -m "chore: build production v$VERSION"
-          git push origin HEAD:${{ github.ref_name }}
+          git add -A
+          git diff --cached --quiet && exit 0
+
+          git commit -m "chore: publish production v$VERSION"
+          git push origin dist
