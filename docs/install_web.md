@@ -29,7 +29,7 @@ First, you need to install Tampermonkey if you haven't already.
 
 ### Step 3: Install GhostGuessr Script
 
-1. Click this install link: **[Install GhostGuessr](https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/script.user.js)**
+1. Click this install link: **[Install GhostGuessr](https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/GhostGuessr.user.js)**
 2. Tampermonkey will open automatically
 3. Click **"Install"** to confirm
 4. The script is now installed and active!
