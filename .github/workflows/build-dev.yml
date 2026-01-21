@@ -57,10 +57,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin dist
-          git checkout dist
+          git fetch origin dist || true
 
-          rm -rf dev production GhostGuessr*.user.js || true
+          if git show-ref --verify --quiet refs/remotes/origin/dist; then
+            git checkout -B dist origin/dist
+          else
+            git checkout --orphan dist
+            git rm -rf . || true
+            git commit --allow-empty -m "init dist branch"
+          fi
+
+          rm -rf dev
           mkdir -p dev
           cp -f "$OUT/"* dev/
 
