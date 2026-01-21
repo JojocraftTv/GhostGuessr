@@ -28,7 +28,6 @@
             const newLng = Number.parseFloat(split[1]);
 
             const roundId = detectRoundId();
-            const isGetMetadata = url.includes("GetMetadata");
             const isNewRound = roundId && roundId !== GG.currentRoundId;
             const isFirstCoords = !GG.initialCoords.lat || !GG.initialCoords.lng;
 
@@ -46,7 +45,7 @@
             
             const isSignificantJump = distanceKm > 5; 
             
-            if (isNewRound || (isGetMetadata && isFirstCoords) || (isGetMetadata && isSignificantJump)) {
+            if (isNewRound || isFirstCoords || isSignificantJump) {
               if (roundId) GG.currentRoundId = roundId;
               GG.initialCoords.lat = newLat;
               GG.initialCoords.lng = newLng;

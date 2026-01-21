@@ -293,11 +293,27 @@
       }
     }
 
-    const debouncedUpdate = () => {
-      requestAnimationFrame(updateFromMarker);
+    let throttleTimer = null;
+    let lastUpdateTime = 0;
+    const THROTTLE_DELAY = 16;
+
+    const throttledUpdate = () => {
+      const now = performance.now();
+      const timeSinceLastUpdate = now - lastUpdateTime;
+
+      if (timeSinceLastUpdate >= THROTTLE_DELAY) {
+        lastUpdateTime = now;
+        requestAnimationFrame(updateFromMarker);
+      } else {
+        if (throttleTimer) clearTimeout(throttleTimer);
+        throttleTimer = setTimeout(() => {
+          lastUpdateTime = performance.now();
+          requestAnimationFrame(updateFromMarker);
+        }, THROTTLE_DELAY - timeSinceLastUpdate);
+      }
     };
 
-    const observer = new MutationObserver(debouncedUpdate);
+    const observer = new MutationObserver(throttledUpdate);
 
     const guessMapContainer = document.querySelector('[class*="guess-map_"]') || mapContainer;
     
@@ -315,9 +331,9 @@
     if (gmap && !GG._scorePredictorMapListeners) {
       GG._scorePredictorMapListeners = true;
       
-      gmap.addListener('idle', debouncedUpdate);
-      gmap.addListener('click', debouncedUpdate);
-      gmap.addListener('drag', debouncedUpdate);
+      gmap.addListener('idle', throttledUpdate);
+      gmap.addListener('click', throttledUpdate);
+      gmap.addListener('drag', throttledUpdate);
     }
 
     function setupMarkerObserver() {
@@ -329,7 +345,7 @@
       if (guessMarker && guessMarker.parentElement) {
         const markerParent = guessMarker.parentElement;
         
-        GG._markerPositionObserver = new MutationObserver(debouncedUpdate);
+        GG._markerPositionObserver = new MutationObserver(throttledUpdate);
         
         GG._markerPositionObserver.observe(markerParent, {
           attributes: true,
@@ -341,7 +357,7 @@
     const mainObserver = new MutationObserver(() => {
       if (!GG._markerPositionObserver) {
         setupMarkerObserver();
-        debouncedUpdate();
+        throttledUpdate();
       }
     });
     
