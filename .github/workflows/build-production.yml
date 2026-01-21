@@ -1,23 +1,18 @@
-name: Build Dev (to dist/dev)
+name: Build Production
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/userscript/**"
-      - "webpack.config.js"
-      - "package.json"
-      - "pnpm-lock.yaml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g., 2.3.1)"
+        required: false
+        type: string
 
 permissions:
   contents: write
 
-concurrency:
-  group: build-dev-main
-  cancel-in-progress: true
-
 jobs:
-  build-dev:
+  build-production:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,66 +31,54 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
-        run: pnpm build
-
-      - name: Copy build output to dist/dev
-        shell: bash
+      - name: Update version if provided
+        if: ${{ inputs.version != '' }}
         run: |
-          set -euo pipefail
+          set -e
 
-          mkdir -p dist/dev
-          rm -f dist/dev/*.user.js dist/dev/*.map || true
-
-          # Core build -> dist/dev
-          cp -f dist/ghostguessr-core.user.js dist/dev/ghostguessr-core.user.js
-
-          # Proxy build (if present) -> dist/dev AND root convenience file
-          if [ -f "dist/ghostguessr-core.proxy.user.js" ]; then
-            cp -f dist/ghostguessr-core.proxy.user.js dist/dev/ghostguessr-core.proxy.user.js
-            cp -f dist/ghostguessr-core.proxy.user.js GhostGuessr.dev.user.js
-          else
-            echo "No proxy userscript found: dist/ghostguessr-core.proxy.user.js"
-          fi
-
-      - name: Replace localhost URL in dev proxy (if present)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -f "GhostGuessr.dev.user.js" ]; then
-            sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/dev/ghostguessr-core.user.js|g' GhostGuessr.dev.user.js
-          else
-            echo "GhostGuessr.dev.user.js not found, skipping sed"
-          fi
-
-      - name: Commit dist/dev
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if ! git status --porcelain | grep -q .; then
-            echo "No changes to commit"
-            exit 0
-          fi
+          npm version "${{ inputs.version }}" --allow-same-version --no-git-tag-version
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add -f dist/dev/ghostguessr-core.user.js
-
-          if [ -f "dist/dev/ghostguessr-core.proxy.user.js" ]; then
-            git add -f dist/dev/ghostguessr-core.proxy.user.js
-          fi
-          if [ -f "GhostGuessr.dev.user.js" ]; then
-            git add -f GhostGuessr.dev.user.js
-          fi
+          git add package.json pnpm-lock.yaml
 
           if git diff --cached --quiet; then
-            echo "No dev dist changes"
+            echo "No version-related changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: bump version to ${{ inputs.version }}"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Build production version
+        run: pnpm build
+
+      - name: Copy proxy script to GhostGuessr.user.js (if exists)
+        run: |
+          cp -f dist/ghostguessr-core.proxy.user.js GhostGuessr.user.js 2>/dev/null || true
+
+      - name: Replace localhost URL and version in GhostGuessr.user.js
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js|g' GhostGuessr.user.js
+          sed -i "s|\[version\]|$VERSION|g" GhostGuessr.user.js
+
+      - name: Commit production build
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -f dist/ghostguessr-core.user.js
+          git add -f GhostGuessr.user.js 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No dist changes"
             exit 0
           fi
 
           VERSION=$(node -p "require('./package.json').version")
-          git commit -m "chore: update dev build (dist/dev) v$VERSION [skip ci]"
-          git push origin HEAD:main
+          git commit -m "chore: build production v$VERSION"
+          git push origin HEAD:${{ github.ref_name }}
