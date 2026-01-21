@@ -1,0 +1,36 @@
+{
+  "name": "ghostguessr",
+  "version": "2.3.0",
+  "description": "Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.",
+  "private": false,
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development",
+    "watch": "webpack --mode development --watch",
+    "serve": "webpack serve --mode development --open",
+    "patcher:dev": "cd src/patcher && pnpm dev",
+    "patcher:build": "cd src/patcher && pnpm build",
+    "build:all": "pnpm build && pnpm patcher:build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JojocraftTv/GhostGuessr"
+  },
+  "keywords": [
+    "geoguessr",
+    "userscript",
+    "tampermonkey"
+  ],
+  "author": "VellusFox, Niceas",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-loader": "^9.1.0",
+    "copy-webpack-plugin": "^12.0.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0",
+    "webpack-userscript": "^3.2.0"
+  }
+}

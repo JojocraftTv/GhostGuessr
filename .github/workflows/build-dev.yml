@@ -1,0 +1,52 @@
+name: Build Dev Version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/userscript/**"
+      - "webpack.config.js"
+      - "package.json"
+
+permissions:
+  contents: write
+
+jobs:
+  build-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dev version
+        run: pnpm dev
+
+      - name: Commit dev build
+        run: |
+          if ! git status --porcelain | grep -q .; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/ghostguessr-core.user.js dist/ghostguessr-core.proxy.user.js GhostGuessr.user.js
+          if git diff --cached --quiet; then
+            echo "No dist changes"
+            exit 0
+          fi
+          git commit -m "chore: build dev version [skip ci]"
+          git push origin HEAD:${{ github.ref }}

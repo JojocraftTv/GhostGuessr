@@ -223,10 +223,6 @@
 
     if (GG._scorePredictorObserver) return;
 
-    let updateTimeout = null;
-    let lastBounds = null;
-    let lastZoom = null;
-
     function updateFromMarker() {
       const guessMarker = document.querySelector('[data-qa="guess-marker"]') || 
                           document.querySelector('[class*="map-pin_mapPin__"]');
@@ -240,16 +236,6 @@
         try {
           const bounds = gmap.getBounds();
           if (!bounds) return;
-
-          const currentZoom = gmap.getZoom();
-          const boundsChanged = !lastBounds || 
-                               lastBounds.toString() !== bounds.toString() ||
-                               lastZoom !== currentZoom;
-
-          if (boundsChanged) {
-            lastBounds = bounds;
-            lastZoom = currentZoom;
-          }
 
           let guessLat = null;
           let guessLng = null;
@@ -304,17 +290,11 @@
         }
       } else {
         hideScorePredictor();
-        lastBounds = null;
-        lastZoom = null;
       }
     }
 
     const debouncedUpdate = () => {
-      if (updateTimeout) return;
-      updateTimeout = setTimeout(() => {
-        updateTimeout = null;
-        updateFromMarker();
-      }, 10);
+      requestAnimationFrame(updateFromMarker);
     };
 
     const observer = new MutationObserver(debouncedUpdate);
@@ -330,6 +310,45 @@
 
     GG._scorePredictorObserver = observer;
     GG.checkScorePredictor = updateFromMarker;
+
+    const gmap = GG.getGoogleMap();
+    if (gmap && !GG._scorePredictorMapListeners) {
+      GG._scorePredictorMapListeners = true;
+      
+      gmap.addListener('idle', debouncedUpdate);
+      gmap.addListener('click', debouncedUpdate);
+      gmap.addListener('drag', debouncedUpdate);
+    }
+
+    function setupMarkerObserver() {
+      if (GG._markerPositionObserver) return;
+      
+      const guessMarker = document.querySelector('[data-qa="guess-marker"]') || 
+                          document.querySelector('[class*="map-pin_mapPin__"]');
+      
+      if (guessMarker && guessMarker.parentElement) {
+        const markerParent = guessMarker.parentElement;
+        
+        GG._markerPositionObserver = new MutationObserver(debouncedUpdate);
+        
+        GG._markerPositionObserver.observe(markerParent, {
+          attributes: true,
+          attributeFilter: ['style']
+        });
+      }
+    }
+
+    const mainObserver = new MutationObserver(() => {
+      if (!GG._markerPositionObserver) {
+        setupMarkerObserver();
+        debouncedUpdate();
+      }
+    });
+    
+    mainObserver.observe(guessMapContainer, {
+      childList: true,
+      subtree: true
+    });
   };
 
   GG.toggleScorePredictor = function() {
