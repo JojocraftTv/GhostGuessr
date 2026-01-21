@@ -39,8 +39,10 @@
       '[class*="nickname"]',
       '[class*="teamName"]',
       '[class*="team-name"]',
-      '[class*="name"]'
-    ];
+      '[class*="name"]',
+      '[class*="username"]',
+      '[class*="nick"]'
+    ]; // TODO: Add more selectors if needed
 
     userNickSelectors.forEach(selector => {
       const elements = document.querySelectorAll(selector);
@@ -69,26 +71,43 @@
   }
 
   function hideClubTags() {
+    const clubTagSelectors = [
+      '[class*="clubTag"]',
+      '[class*="club-tag"]',
+      '[class*="club"]',
+      '[class*="tag"]'
+    ];
+
+    // TODO: Add more selectors if needed
     if (!GG.settings || !GG.settings.streamerMode) return;
 
-    const clubTags = document.querySelectorAll('.club-tag_clubTag__UquGW');
-    clubTags.forEach(tag => {
-      if (!processedElements.has(tag)) {
-        processedElements.add(tag);
-        tag.style.display = 'none';
-      }
+    clubTagSelectors.forEach(selector => {
+      const clubTags = document.querySelectorAll(selector);
+      clubTags.forEach(tag => {
+        if (!processedElements.has(tag)) {
+          processedElements.add(tag);
+          tag.style.display = 'none';
+        }
+      });
     });
   }
 
   function hideFlags() {
+    const flagSelectors = [
+      '[class*="flag"]'
+    ];
+
+    // TODO: Add more selectors if needed
     if (!GG.settings || !GG.settings.streamerMode) return;
 
-    const flags = document.querySelectorAll('.user-nick_flag__24EXB, .country-flag_flag__tlHIr');
-    flags.forEach(flag => {
-      if (!processedElements.has(flag)) {
-        processedElements.add(flag);
-        flag.style.display = 'none';
-      }
+    flagSelectors.forEach(selector => {
+      const flags = document.querySelectorAll(selector);
+      flags.forEach(flag => {
+        if (!processedElements.has(flag)) {
+          processedElements.add(flag);
+          flag.style.display = 'none';
+        }
+      });
     });
   }
 
