@@ -15,6 +15,7 @@
   const MSG_STORE_ORIGINAL = "GG_AVATAR_STORE_ORIGINAL";
   const MSG_RESTORE_ORIGINAL = "GG_AVATAR_RESTORE_ORIGINAL";
   const MSG_REFRESH_AVATAR = "GG_AVATAR_REFRESH";
+  const MSG_USER_ID = "GG_AVATAR_USER_ID";
 
   const hasGMStorage =
     typeof GM_getValue === "function" && typeof GM_setValue === "function";
@@ -57,6 +58,7 @@
   console.log("[GG Skinchanger] Saved assets count:", saved && saved.equippedIds ? saved.equippedIds.length : 0);
   const initialEquipped =
     saved && Array.isArray(saved.equippedIds) ? saved.equippedIds : [];
+  const initialUserId = saved && saved.userId ? saved.userId : null;
   const initialLocalSaveOnly = storageGet(STORE_TOGGLE, true);
 
   let hookReady = false;
@@ -96,13 +98,25 @@
         if (!ids.length) return;
 
         console.log("[GG Skinchanger] Saving equipped IDs:", ids);
-        storageSet(STORE_KEY, { equippedIds: ids, savedAt: Date.now() });
+        const currentSaved = storageGet(STORE_KEY, {});
+        storageSet(STORE_KEY, { ...currentSaved, equippedIds: ids, savedAt: Date.now() });
         
         window.postMessage({ type: MSG_APPLY, equippedIds: ids }, "*");
         
         setTimeout(() => {
           sendEquippedToPage(ids);
         }, 100);
+        return;
+      }
+      if (ev.data.type === MSG_USER_ID) {
+        const uid = ev.data.userId;
+        if (typeof uid === "string" && uid) {
+             const currentSaved = storageGet(STORE_KEY, {});
+             if (currentSaved.userId !== uid) {
+                 console.log("[GG Skinchanger] Saving User ID:", uid);
+                 storageSet(STORE_KEY, { ...currentSaved, userId: uid });
+             }
+        }
         return;
       }
     } catch (e) {}
@@ -145,9 +159,9 @@
         const MSG_APPLY = ${JSON.stringify(MSG_APPLY)};
         const MSG_TOGGLE = ${JSON.stringify(MSG_TOGGLE)};
         const MSG_HOOK_READY = ${JSON.stringify(MSG_HOOK_READY)};
-        const MSG_STORE_ORIGINAL = ${JSON.stringify(MSG_STORE_ORIGINAL)};
         const MSG_RESTORE_ORIGINAL = ${JSON.stringify(MSG_RESTORE_ORIGINAL)};
         const MSG_REFRESH_AVATAR = ${JSON.stringify(MSG_REFRESH_AVATAR)};
+        const MSG_USER_ID = ${JSON.stringify(MSG_USER_ID)};
 
         const SAVE_PATH = "/api/v4/avatar/save";
         const AVATAR_USER = "/api/v4/avatar/user";
@@ -163,13 +177,14 @@
 
         const initialEquipped = ${JSON.stringify(initialEquipped)};
         const initialLocalSaveOnly = ${JSON.stringify(initialLocalSaveOnly)};
+        const initialUserId = ${JSON.stringify(initialUserId)};
 
         let savedEquippedIds = Array.isArray(initialEquipped)
           ? initialEquipped.filter((x) => typeof x === "string")
           : [];
         let localSaveOnly = !!initialLocalSaveOnly;
         let profileNick = null;
-        let profileUserId = null;
+        let profileUserId = initialUserId || null;
         const assetsById = new Map();
         const originalFetch = window.fetch;
         let baseFetch = originalFetch;
@@ -528,7 +543,10 @@
                 try {
                   const user = data && data.user;
                   if (!user) return;
-                  if (typeof user.id === "string" && user.id) profileUserId = user.id;
+                  if (typeof user.id === "string" && user.id) {
+                      profileUserId = user.id;
+                      window.postMessage({ type: MSG_USER_ID, userId: profileUserId }, "*");
+                  }
                   if (typeof user.nick === "string" && user.nick) profileNick = user.nick;
                   else if (typeof user.userName === "string" && user.userName) profileNick = user.userName;
                   else if (typeof user.username === "string" && user.username) profileNick = user.username;
@@ -740,8 +758,7 @@
           
           const isAvatarUser =
             isPath(url, AVATAR_USER) || 
-            (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId) ||
-            (toPath(url).startsWith(AVATAR_USER_PREFIX) && localSaveOnly);
+            (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
 
           if (method === "GET" && isPath(url, ELITE_DAYS)) {
             return new Response("999", {
