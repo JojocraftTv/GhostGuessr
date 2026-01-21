@@ -1272,7 +1272,8 @@
       '[class*="team-name"]',
       '[class*="name"]',
       '[class*="username"]',
-      '[class*="nick"]'
+      '[class*="nick"]',
+      '[class*="playerNick"]'
     ]; // TODO: Add more selectors if needed
 
     userNickSelectors.forEach(selector => {
@@ -1519,8 +1520,24 @@
 
             const roundId = detectRoundId();
             const isGetMetadata = url.includes("GetMetadata");
+            const isNewRound = roundId && roundId !== GG.currentRoundId;
+            const isFirstCoords = !GG.initialCoords.lat || !GG.initialCoords.lng;
 
-            if ((roundId && roundId !== GG.currentRoundId) || isGetMetadata) {
+            let distanceKm = 0;
+            if (GG.coords.lat && GG.coords.lng) {
+                 const R = 6371; 
+                 const dLat = (newLat - GG.coords.lat) * Math.PI / 180;
+                 const dLng = (newLng - GG.coords.lng) * Math.PI / 180;
+                 const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                           Math.cos(GG.coords.lat * Math.PI / 180) * Math.cos(newLat * Math.PI / 180) * 
+                           Math.sin(dLng/2) * Math.sin(dLng/2);
+                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                 distanceKm = R * c;
+            }
+            
+            const isSignificantJump = distanceKm > 5; 
+            
+            if (isNewRound || (isGetMetadata && isFirstCoords) || (isGetMetadata && isSignificantJump)) {
               if (roundId) GG.currentRoundId = roundId;
               GG.initialCoords.lat = newLat;
               GG.initialCoords.lng = newLng;
@@ -1529,24 +1546,32 @@
                 GG.marker.setMap(null);
                 GG.marker = null;
               }
-              if (GG.streetviewMarker) {
-                GG.streetviewMarker.setMap(null);
-                GG.streetviewMarker = null;
-              }
-              if (GG.connectionLine) {
-                GG.connectionLine.setMap(null);
-                GG.connectionLine = null;
-              }
-
-              if (GG._scorePredictorObserver) {
-                GG._scorePredictorObserver.disconnect();
-                GG._scorePredictorObserver = null;
+              
+              if (isNewRound || isSignificantJump) {
+                  if (GG.streetviewMarker) {
+                    GG.streetviewMarker.setMap(null);
+                    GG.streetviewMarker = null;
+                  }
+                  if (GG.connectionLine) {
+                    GG.connectionLine.setMap(null);
+                    GG.connectionLine = null;
+                  }
+                  if (GG._scorePredictorObserver) {
+                    GG._scorePredictorObserver.disconnect();
+                    GG._scorePredictorObserver = null;
+                  }
               }
             }
 
+            if (newLat === 0 && newLng === 0) return;
+
             GG.coords.lat = newLat;
             GG.coords.lng = newLng;
-            if (GG.settings.enabled && GG.gmap) GG.placeMarker();
+            
+            if (GG.settings.enabled) {
+                if (!GG.gmap) GG.gmap = GG.getGoogleMap();
+                GG.placeMarker();
+            }
           }
         } catch (e) {}
       });
@@ -1558,11 +1583,22 @@
     let container =
       document.querySelector('[class*="guess-map_canvas__"]') ||
       document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-      document.querySelector('[data-qa="guess-map-canvas"]');
+      document.querySelector('[data-qa="guess-map-canvas"]') ||
+      document.querySelector('[class*="game-layout_map__"]');
+
+    if (!container) {
+         const gmStyle = document.querySelector('.gm-style');
+         if (gmStyle && gmStyle.parentElement) {
+             container = gmStyle.parentElement;
+         }
+    }
+
     if (!container) return null;
+
     if (GG.gmap && GG.gmap.getDiv && GG.gmap.getDiv() === container) {
       return GG.gmap;
     }
+    
     GG.gmap = null;
     try {
       let reactKey = Object.keys(container).find((key) =>
@@ -1791,20 +1827,21 @@
   };
 
   GG.placeMarker = function () {
-    if (!GG.initialCoords.lat || !GG.initialCoords.lng) return;
-    if (!GG.marker) {
-      GG.createMarker();
-    } else {
-      try {
-        if (
-          typeof google !== "undefined" &&
-          google.maps &&
-          GG.marker.setPosition
-        ) {
-          let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
-          GG.marker.setPosition(position);
+    if (GG.initialCoords.lat && GG.initialCoords.lng) {
+        if (!GG.marker) {
+          GG.createMarker();
+        } else {
+          try {
+            if (
+              typeof google !== "undefined" &&
+              google.maps &&
+              GG.marker.setPosition
+            ) {
+              let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
+              GG.marker.setPosition(position);
+            }
+          } catch (e) {}
         }
-      } catch (e) {}
     }
 
     if (GG.settings.showStreetviewMarker && GG.coords.lat && GG.coords.lng) {
@@ -1835,7 +1872,9 @@
     let isOnMapView =
       document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
       document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
+      document.querySelector('[data-qa="guess-map-canvas"]') || 
+      document.querySelector('.gm-style');
     if (!isOnMapView) return;
 
     GG.placeMarker();
@@ -1860,7 +1899,9 @@
     let isOnMapView =
       document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
       document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
+      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
+      document.querySelector('[data-qa="guess-map-canvas"]') ||
+      document.querySelector('.gm-style');
     if (!isOnMapView) return;
 
     GG.settings.enabled = !GG.settings.enabled;
@@ -2094,7 +2135,8 @@
   GG.setupScorePredictorListeners = function() {
     const mapContainer = document.querySelector('[class*="guess-map_canvas__"]') ||
                         document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-                        document.querySelector('[data-qa="guess-map-canvas"]');
+                        document.querySelector('[data-qa="guess-map-canvas"]') ||
+                        document.querySelector('.gm-style');
     
     if (!mapContainer) return;
 
@@ -2112,11 +2154,14 @@
     let lastZoom = null;
 
     function updateFromMarker() {
-      const guessMarker = document.querySelector('[data-qa="guess-marker"]');
+      const guessMarker = document.querySelector('[data-qa="guess-marker"]') || 
+                          document.querySelector('[class*="map-pin_mapPin__"]');
       
       if (guessMarker && GG.settings.showScorePredictor && GG.coords.lat && GG.coords.lng) {
         const gmap = GG.getGoogleMap();
-        if (!gmap) return;
+        if (!gmap) {
+             return;
+        }
 
         try {
           const bounds = gmap.getBounds();
@@ -2142,17 +2187,20 @@
 
           const fiber = findReactProps(guessMarker);
           let current = fiber;
+          
           while (current) {
             const props = current.memoizedProps;
-            if (props && (props.lat || props.lng)) {
-               guessLat = props.lat;
-               guessLng = props.lng;
-               break;
-            }
-            if (props && props.position && (props.position.lat || props.position.lng)) {
-               guessLat = typeof props.position.lat === 'function' ? props.position.lat() : props.position.lat;
-               guessLng = typeof props.position.lng === 'function' ? props.position.lng() : props.position.lng;
-               break;
+            if (props) {
+                if (props.lat && props.lng) {
+                   guessLat = props.lat;
+                   guessLng = props.lng;
+                   break;
+                }
+                if (props.position && (props.position.lat || props.position.lng)) {
+                   guessLat = typeof props.position.lat === 'function' ? props.position.lat() : props.position.lat;
+                   guessLng = typeof props.position.lng === 'function' ? props.position.lng() : props.position.lng;
+                   break;
+                }
             }
             current = current.return;
           }
@@ -2160,17 +2208,22 @@
           if (guessLat === null || guessLng === null) {
               const markerRect = guessMarker.getBoundingClientRect();
               const mapRect = mapContainer.getBoundingClientRect();
-              if (markerRect.width === 0 || mapRect.width === 0) return;
-
-              const relX = (markerRect.left + markerRect.width / 2 - mapRect.left) / mapRect.width;
-              const relY = (markerRect.top + markerRect.height / 2 - mapRect.top) / mapRect.height;
-              const ne = bounds.getNorthEast();
-              const sw = bounds.getSouthWest();
-              guessLng = sw.lng() + (ne.lng() - sw.lng()) * relX;
-              guessLat = ne.lat() - (ne.lat() - sw.lat()) * relY;
+              
+              if (markerRect.width > 0 && mapRect.width > 0) {
+                  const relX = (markerRect.left + markerRect.width / 2 - mapRect.left) / mapRect.width;
+                  const relY = (markerRect.top + markerRect.height / 2 - mapRect.top) / mapRect.height;
+                  
+                  const ne = bounds.getNorthEast();
+                  const sw = bounds.getSouthWest();
+                  
+                  guessLng = sw.lng() + (ne.lng() - sw.lng()) * relX;
+                  guessLat = ne.lat() - (ne.lat() - sw.lat()) * relY;
+              }
           }
 
-          updateScorePredictor(guessLat, guessLng);
+          if (guessLat !== null && guessLng !== null) {
+              updateScorePredictor(guessLat, guessLng);
+          }
         } catch (e) {
           console.error('[GG Score Predictor] Error calculating position:', e);
           hideScorePredictor();
@@ -2187,7 +2240,7 @@
       updateTimeout = setTimeout(() => {
         updateTimeout = null;
         updateFromMarker();
-      }, 50);
+      }, 10);
     };
 
     const observer = new MutationObserver(debouncedUpdate);
@@ -2198,10 +2251,11 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['style']
+      attributeFilter: ['style', 'class']
     });
 
     GG._scorePredictorObserver = observer;
+    GG.checkScorePredictor = updateFromMarker;
   };
 
   GG.toggleScorePredictor = function() {
