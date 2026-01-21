@@ -54,6 +54,7 @@ module.exports = (env, argv) => {
           {
             from: 'dist/ghostguessr-core.proxy.user.js',
             to: '../GhostGuessr.user.js',
+            noErrorOnMissing: true,
           },
         ],
       }),
