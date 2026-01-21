@@ -39,7 +39,6 @@ jobs:
       - shell: bash
         run: |
           set -euo pipefail
-
           OUT=".publish/dev"
           rm -rf "$OUT"
           mkdir -p "$OUT"
@@ -58,17 +57,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin dist || true
-          git reset --hard
-          git clean -fdx
-
-          if git show-ref --verify --quiet refs/remotes/origin/dist; then
-            git checkout -B dist origin/dist
-          else
-            git checkout --orphan dist
-            git rm -rf . || true
-            git commit --allow-empty -m "init dist branch"
-          fi
+          git fetch origin dist
+          git checkout dist
 
           rm -rf dev production GhostGuessr*.user.js || true
           mkdir -p dev
@@ -79,4 +69,4 @@ jobs:
 
           VERSION=$(node -p "require('./package.json').version" || echo dev)
           git commit -m "chore: publish dev build v$VERSION [skip ci]"
-          git push -f origin dist
+          git push origin dist
