@@ -41,7 +41,8 @@
       '[class*="team-name"]',
       '[class*="name"]',
       '[class*="username"]',
-      '[class*="nick"]'
+      '[class*="nick"]',
+      '[class*="playerNick"]'
     ]; // TODO: Add more selectors if needed
 
     userNickSelectors.forEach(selector => {
