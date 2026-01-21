@@ -9,7 +9,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: patcher/src-tauri/target
+  CARGO_TARGET_DIR: ${{ github.workspace }}\patcher\src-tauri\target
 
 jobs:
   build:
@@ -23,7 +23,8 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: patcher/src-tauri
+          workspaces: |
+            patcher/src-tauri
           cache-on-failure: true
 
       - name: Install cargo-binstall
@@ -39,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $cargoPath = "patcher/src-tauri/Cargo.toml"
+          $cargoPath = Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri/Cargo.toml"
           (Get-Content $cargoPath -Raw) `
             -replace '(?m)^version\s*=\s*".*"$', "version = `"$version`"" `
             | Set-Content $cargoPath
@@ -48,24 +49,38 @@ jobs:
       - name: Build Tauri app
         shell: pwsh
         run: |
-          cd patcher/src-tauri
+          cd (Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri")
           cargo tauri build
 
       - name: Generate update.json
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $exePath = "patcher/src-tauri/target/release/GhostGuessr-Patcher.exe"
+
+          $releaseDir = Join-Path $env:GITHUB_WORKSPACE "patcher/src-tauri/target/release"
+
+          $exePath = Join-Path $releaseDir "GhostGuessr-Patcher.exe"
+
+          if (!(Test-Path $exePath)) {
+            $cand = Get-ChildItem $releaseDir -Filter "*.exe" | Sort-Object Length -Descending | Select-Object -First 1
+            if (!$cand) { throw "No .exe found in $releaseDir" }
+            $exePath = $cand.FullName
+          }
+
+          "Using exe: $exePath"
+
           $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
           $digest = "sha256:$hash"
-          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/GhostGuessr-Patcher.exe"
+
+          $fileName = [System.IO.Path]::GetFileName($exePath)
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/$fileName"
 
           (@{ version=$tag; url=$url; digest=$digest } | ConvertTo-Json) |
-            Set-Content "update.json" -Encoding utf8
+            Set-Content (Join-Path $env:GITHUB_WORKSPACE "update.json") -Encoding utf8
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            patcher/src-tauri/target/release/GhostGuessr-Patcher.exe
+            patcher/src-tauri/target/release/*.exe
             update.json

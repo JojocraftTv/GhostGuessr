@@ -209,7 +209,8 @@
   GG.setupScorePredictorListeners = function() {
     const mapContainer = document.querySelector('[class*="guess-map_canvas__"]') ||
                         document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-                        document.querySelector('[data-qa="guess-map-canvas"]');
+                        document.querySelector('[data-qa="guess-map-canvas"]') ||
+                        document.querySelector('.gm-style');
     
     if (!mapContainer) return;
 
@@ -227,11 +228,14 @@
     let lastZoom = null;
 
     function updateFromMarker() {
-      const guessMarker = document.querySelector('[data-qa="guess-marker"]');
+      const guessMarker = document.querySelector('[data-qa="guess-marker"]') || 
+                          document.querySelector('[class*="map-pin_mapPin__"]');
       
       if (guessMarker && GG.settings.showScorePredictor && GG.coords.lat && GG.coords.lng) {
         const gmap = GG.getGoogleMap();
-        if (!gmap) return;
+        if (!gmap) {
+             return;
+        }
 
         try {
           const bounds = gmap.getBounds();
@@ -257,17 +261,20 @@
 
           const fiber = findReactProps(guessMarker);
           let current = fiber;
+          
           while (current) {
             const props = current.memoizedProps;
-            if (props && (props.lat || props.lng)) {
-               guessLat = props.lat;
-               guessLng = props.lng;
-               break;
-            }
-            if (props && props.position && (props.position.lat || props.position.lng)) {
-               guessLat = typeof props.position.lat === 'function' ? props.position.lat() : props.position.lat;
-               guessLng = typeof props.position.lng === 'function' ? props.position.lng() : props.position.lng;
-               break;
+            if (props) {
+                if (props.lat && props.lng) {
+                   guessLat = props.lat;
+                   guessLng = props.lng;
+                   break;
+                }
+                if (props.position && (props.position.lat || props.position.lng)) {
+                   guessLat = typeof props.position.lat === 'function' ? props.position.lat() : props.position.lat;
+                   guessLng = typeof props.position.lng === 'function' ? props.position.lng() : props.position.lng;
+                   break;
+                }
             }
             current = current.return;
           }
@@ -275,17 +282,22 @@
           if (guessLat === null || guessLng === null) {
               const markerRect = guessMarker.getBoundingClientRect();
               const mapRect = mapContainer.getBoundingClientRect();
-              if (markerRect.width === 0 || mapRect.width === 0) return;
-
-              const relX = (markerRect.left + markerRect.width / 2 - mapRect.left) / mapRect.width;
-              const relY = (markerRect.top + markerRect.height / 2 - mapRect.top) / mapRect.height;
-              const ne = bounds.getNorthEast();
-              const sw = bounds.getSouthWest();
-              guessLng = sw.lng() + (ne.lng() - sw.lng()) * relX;
-              guessLat = ne.lat() - (ne.lat() - sw.lat()) * relY;
+              
+              if (markerRect.width > 0 && mapRect.width > 0) {
+                  const relX = (markerRect.left + markerRect.width / 2 - mapRect.left) / mapRect.width;
+                  const relY = (markerRect.top + markerRect.height / 2 - mapRect.top) / mapRect.height;
+                  
+                  const ne = bounds.getNorthEast();
+                  const sw = bounds.getSouthWest();
+                  
+                  guessLng = sw.lng() + (ne.lng() - sw.lng()) * relX;
+                  guessLat = ne.lat() - (ne.lat() - sw.lat()) * relY;
+              }
           }
 
-          updateScorePredictor(guessLat, guessLng);
+          if (guessLat !== null && guessLng !== null) {
+              updateScorePredictor(guessLat, guessLng);
+          }
         } catch (e) {
           console.error('[GG Score Predictor] Error calculating position:', e);
           hideScorePredictor();
@@ -302,7 +314,7 @@
       updateTimeout = setTimeout(() => {
         updateTimeout = null;
         updateFromMarker();
-      }, 50);
+      }, 10);
     };
 
     const observer = new MutationObserver(debouncedUpdate);
@@ -313,10 +325,11 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['style']
+      attributeFilter: ['style', 'class']
     });
 
     GG._scorePredictorObserver = observer;
+    GG.checkScorePredictor = updateFromMarker;
   };
 
   GG.toggleScorePredictor = function() {
