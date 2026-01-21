@@ -39,6 +39,7 @@ jobs:
       - shell: bash
         run: |
           set -euo pipefail
+
           OUT=".publish/dev"
           rm -rf "$OUT"
           mkdir -p "$OUT"
@@ -58,6 +59,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git fetch origin dist || true
+          git reset --hard
+          git clean -fdx
 
           if git show-ref --verify --quiet refs/remotes/origin/dist; then
             git checkout -B dist origin/dist
@@ -67,7 +70,7 @@ jobs:
             git commit --allow-empty -m "init dist branch"
           fi
 
-          rm -rf dev
+          rm -rf dev production GhostGuessr*.user.js || true
           mkdir -p dev
           cp -f "$OUT/"* dev/
 
@@ -76,4 +79,4 @@ jobs:
 
           VERSION=$(node -p "require('./package.json').version" || echo dev)
           git commit -m "chore: publish dev build v$VERSION [skip ci]"
-          git push origin dist
+          git push -f origin dist

@@ -46,6 +46,7 @@ jobs:
       - shell: bash
         run: |
           set -euo pipefail
+
           OUT=".publish/production"
           rm -rf "$OUT"
           mkdir -p "$OUT"
@@ -67,6 +68,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git fetch origin dist || true
+          git reset --hard
+          git clean -fdx
 
           if git show-ref --verify --quiet refs/remotes/origin/dist; then
             git checkout -B dist origin/dist
@@ -76,7 +79,7 @@ jobs:
             git commit --allow-empty -m "init dist branch"
           fi
 
-          rm -rf production
+          rm -rf production dev GhostGuessr*.user.js || true
           mkdir -p production
           cp -f "$OUT/"* production/
 
@@ -84,4 +87,4 @@ jobs:
           git diff --cached --quiet && exit 0
 
           git commit -m "chore: publish production v$VERSION"
-          git push origin dist
+          git push -f origin dist
