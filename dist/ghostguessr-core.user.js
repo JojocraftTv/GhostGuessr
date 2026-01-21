@@ -2240,6 +2240,59 @@
       updateTimeout = setTimeout(() => {
         updateTimeout = null;
         updateFromMarker();
+        if (!GG.settings.showScorePredictor) return;
+        guessMarker = document.querySelector('[data-qa="guess-marker"]') || 
+        document.querySelector('[class*="map-pin_mapPin__"]');
+        
+        if (!guessMarker) return;
+
+        const gmap = GG.getGoogleMap();
+        if (!gmap) return;
+
+        const bounds = gmap.getBounds();
+        if (!bounds) return;
+
+        const currentZoom = gmap.getZoom();
+        const boundsChanged = !lastBounds || 
+                             lastBounds.toString() !== bounds.toString() ||
+                             lastZoom !== currentZoom;
+
+        if (boundsChanged) {
+          lastBounds = bounds;
+          lastZoom = currentZoom;
+        }
+
+        let guessLat = null;
+        let guessLng = null;
+
+        const findReactProps = (dom) => {
+          const key = Object.keys(dom).find(k => k.startsWith('__reactFiber$'));
+          return key ? dom[key] : null;
+        };
+
+        const fiber = findReactProps(guessMarker);
+        let current = fiber;
+        
+        while (current) {
+          const props = current.memoizedProps;
+          if (props) {
+            if (props.lat && props.lng) {
+              guessLat = props.lat;
+              guessLng = props.lng;
+              break;
+            }
+            if (props.position && (props.position.lat || props.position.lng)) {
+              guessLat = typeof props.position.lat === 'function' ? props.position.lat() : props.position.lat;
+              guessLng = typeof props.position.lng === 'function' ? props.position.lng() : props.position.lng;
+              break;
+            }
+          }
+          current = current.return;
+        }
+
+        if (guessLat !== null && guessLng !== null) {
+          updateScorePredictor(guessLat, guessLng);
+        }
       }, 10);
     };
 
