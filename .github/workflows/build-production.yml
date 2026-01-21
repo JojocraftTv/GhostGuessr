@@ -58,6 +58,10 @@ jobs:
         run: |
           cp -f dist/ghostguessr-core.proxy.user.js GhostGuessr.user.js 2>/dev/null || true
 
+      - name: Replace localhost URL with production URL
+        run: |
+          sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js|g' GhostGuessr.user.js
+
       - name: Commit production build
         run: |
           set -e

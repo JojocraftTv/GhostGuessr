@@ -46,7 +46,7 @@ module.exports = (env, argv) => {
         proxyScript: {
           enable: isDev,
           filename: '[basename].proxy.user.js',
-          baseUrl: isDev ? 'http://localhost:8080' : "https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js",
+          baseUrl: isDev ? 'http://localhost:8080/ghostguessr-core.user.js' : "https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js",
         },
       }),
       new CopyPlugin({
