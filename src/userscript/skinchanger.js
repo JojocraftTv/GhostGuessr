@@ -290,13 +290,15 @@
         });
 
         function toPath(urlLike) {
-          try {
-            return new URL(String(urlLike), location.origin).pathname;
-          } catch {
-            return String(urlLike || "")
-              .replace(location.origin, "")
-              .split("?")[0];
+          const s = String(urlLike || "");
+          if (s.startsWith("http")) {
+            try {
+              return new URL(s).pathname;
+            } catch {
+              return s.split("?")[0];
+            }
           }
+          return s.split("?")[0];
         }
 
         function isPath(urlLike, path) {
@@ -324,68 +326,6 @@
           }
         }
 
-        function deepForceUnlockedTrue(value) {
-          if (!value || typeof value !== "object") return value;
-          if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-              value[i] = deepForceUnlockedTrue(value[i]);
-            }
-            return value;
-          }
-          for (const k of Object.keys(value)) {
-            if (k === "unlocked") value[k] = true;
-            else value[k] = deepForceUnlockedTrue(value[k]);
-          }
-          return value;
-        }
-
-        function forceEliteOwnership(value) {
-          if (!value || typeof value !== "object") return value;
-          if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-              value[i] = forceEliteOwnership(value[i]);
-            }
-            return value;
-          }
-          if (value.isEliteExclusive === true) value.isEliteExclusive = false;
-          if (value.isOwned === false) value.isOwned = true;
-          if (value.isInUserInventory === false) value.isInUserInventory = true;
-          for (const k of Object.keys(value)) {
-            value[k] = forceEliteOwnership(value[k]);
-          }
-          return value;
-        }
-
-        function forceEmptyRequirements(value) {
-          if (!value || typeof value !== "object") return value;
-          if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-              value[i] = forceEmptyRequirements(value[i]);
-            }
-            return value;
-          }
-          if (Array.isArray(value.requirements)) value.requirements = [];
-          for (const k of Object.keys(value)) {
-            value[k] = forceEmptyRequirements(value[k]);
-          }
-          return value;
-        }
-
-        function forceProductNull(value) {
-          if (!value || typeof value !== "object") return value;
-          if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-              value[i] = forceProductNull(value[i]);
-            }
-            return value;
-          }
-          if (value.hasOwnProperty("product")) value.product = null;
-          for (const k of Object.keys(value)) {
-            value[k] = forceProductNull(value[k]);
-          }
-          return value;
-        }
-
         function getEquippedBorderUrl() {
           for (const id of savedEquippedIds) {
             const asset = assetsById.get(id);
@@ -395,57 +335,6 @@
             }
           }
           return null;
-        }
-
-        function forceEliteProfile(data, url) {
-          if (!data || typeof data !== "object") return;
-          if (!data.user || typeof data.user !== "object") data.user = {};
-
-          if (isPath(url, PROFILES)) {
-            if (typeof data.user.id === "string" && data.user.id) {
-              profileUserId = data.user.id;
-            }
-            if (typeof data.user.nick === "string" && data.user.nick) {
-              profileNick = data.user.nick;
-            } else if (
-              typeof data.user.userName === "string" &&
-              data.user.userName
-            ) {
-              profileNick = data.user.userName;
-            } else if (
-              typeof data.user.username === "string" &&
-              data.user.username
-            ) {
-              profileNick = data.user.username;
-            }
-          }
-
-          if (profileUserId && data.user.id === profileUserId) {
-            data.user.type = "Elite";
-            const borderUrl = getEquippedBorderUrl();
-            if (borderUrl) data.user.borderUrl = borderUrl;
-          }
-        }
-
-        function forceEliteDays() {
-          return 999;
-        }
-
-        function applyRankedTeamBorder(data) {
-          if (!data || typeof data !== "object") return;
-          if (!data.team || !Array.isArray(data.team.members)) return;
-          const borderUrl = getEquippedBorderUrl();
-          if (!borderUrl) return;
-          for (const member of data.team.members) {
-            if (!member) continue;
-            if (profileUserId && member.userId === profileUserId) {
-              member.borderUrl = borderUrl;
-              continue;
-            }
-            if (profileNick && member.nick === profileNick) {
-              member.borderUrl = borderUrl;
-            }
-          }
         }
 
         function markAssetsReady() {
@@ -481,60 +370,108 @@
         let isRefreshing = false;
         let refreshDebounceTimer = null;
 
-        function collectAssetsFromCustomization(data, filterSet) {
-          try {
+        function processData(data, opts = {}) {
+            if (!data || typeof data !== "object") return;
+            
             const seen = new Set();
-            let assetCount = 0;
             const MAX_ASSETS = 2000;
+            let assetCount = 0;
 
             function maybeStoreAsset(obj) {
-              if (!obj || typeof obj !== "object") return;
-              const id = obj.id;
-              if (typeof id !== "string") return;
-              if (filterSet && !filterSet.has(id)) return;
-              const looksLikeAsset =
-                typeof obj.slot === "number" ||
-                typeof obj.meshGlb === "string" ||
-                typeof obj.texture === "string" ||
-                typeof obj.icon === "string";
-              if (looksLikeAsset) {
-                if (assetCount >= MAX_ASSETS) {
-                  console.warn('[GG Skinchanger Hook] Asset limit reached, stopping collection');
-                  return;
+                if (!obj || typeof obj !== "object") return;
+                const id = obj.id;
+                if (typeof id !== "string") return;
+                if (opts.filterSet && !opts.filterSet.has(id)) return;
+                
+                const looksLikeAsset =
+                    typeof obj.slot === "number" ||
+                    typeof obj.meshGlb === "string" ||
+                    typeof obj.texture === "string" ||
+                    typeof obj.icon === "string";
+
+                if (looksLikeAsset) {
+                     if (assetCount >= MAX_ASSETS) return;
+                     if (!assetsById.has(id)) {
+                        assetsById.set(id, obj);
+                        assetCount++;
+                     }
                 }
-                assetsById.set(id, obj);
-                assetCount++;
-              }
             }
 
-            function walk(obj, depth = 0) {
-              if (!obj || typeof obj !== "object") return;
-              if (seen.has(obj)) return;
-              if (seen.size > 50000) return;
-              if (depth > 20) return;
-              seen.add(obj);
+            function walk(obj, depth) {
+                if (!obj || typeof obj !== "object") return;
+                if (seen.has(obj)) return;
+                if (depth > 50 || seen.size > 20000) return;
+                seen.add(obj);
 
-              if (Array.isArray(obj)) {
-                for (const item of obj) walk(item, depth + 1);
-                return;
-              }
+                if (Array.isArray(obj)) {
+                    for (let i = 0; i < obj.length; i++) {
+                        walk(obj[i], depth + 1);
+                    }
+                    return;
+                }
 
-              if (obj.asset) maybeStoreAsset(obj.asset);
-              else maybeStoreAsset(obj);
+                if (opts.unlock) {
+                    if (obj.hasOwnProperty("unlocked")) obj.unlocked = true;
+                }
 
-              for (const key of Object.keys(obj)) {
-                const value = obj[key];
-                if (value && typeof value === "object") walk(value, depth + 1);
-              }
+                if (opts.ownership) {
+                     if (obj.hasOwnProperty("isEliteExclusive")) obj.isEliteExclusive = false;
+                     if (obj.hasOwnProperty("isOwned")) obj.isOwned = true;
+                     if (obj.hasOwnProperty("isInUserInventory")) obj.isInUserInventory = true;
+                }
+
+                if (opts.emptyReqs) {
+                    if (Array.isArray(obj.requirements)) obj.requirements = [];
+                }
+
+                if (opts.nullProduct) {
+                    if (obj.hasOwnProperty("product")) obj.product = null;
+                }
+
+                if (opts.collectAssets) {
+                    if (obj.asset) maybeStoreAsset(obj.asset);
+                    else maybeStoreAsset(obj);
+                }
+                
+                if (opts.eliteProfile) {
+                     if (opts.isProfilesPath && obj.user && typeof obj.user === 'object') {
+                        const u = obj.user;
+                        if (typeof u.id === 'string' && u.id) profileUserId = u.id;
+                        if (typeof u.nick === 'string' && u.nick) profileNick = u.nick;
+                        else if (typeof u.userName === 'string') profileNick = u.userName;
+                        else if (typeof u.username === 'string') profileNick = u.username;
+                        
+                        if (profileUserId && u.id === profileUserId) {
+                             u.type = "Elite";
+                             const b = getEquippedBorderUrl();
+                             if (b) u.borderUrl = b;
+                        }
+                     }
+                     if (opts.isRankedTeamPath && obj.userId && (obj.userId === profileUserId || (profileNick && obj.nick === profileNick))) {
+                         const b = getEquippedBorderUrl();
+                         if (b) obj.borderUrl = b;
+                     }
+                }
+
+                for (const key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                        walk(obj[key], depth + 1);
+                    }
+                }
             }
+            
+            try {
+                walk(data, 0);
 
-            walk(data);
-            console.log('[GG Skinchanger Hook] Collected assets:', assetCount, 'Total in map:', assetsById.size);
-            markAssetsReady();
-            filterSavedEquippedIds();
-          } catch (e) {
-            console.error('[GG Skinchanger Hook] Error collecting assets:', e);
-          }
+                if (opts.collectAssets && assetCount > 0) {
+                     console.log('[GG Skinchanger Hook] Collected assets:', assetCount, 'Total in map:', assetsById.size);
+                     markAssetsReady();
+                     filterSavedEquippedIds();
+                }
+            } catch (e) {
+                console.error('[GG Skinchanger Hook] processData error:', e);
+            }
         }
 
         function fetchOwnProfile() {
@@ -603,10 +540,15 @@
               .then(async (res) => {
                 try {
                   const data = await res.clone().json();
-                  deepForceUnlockedTrue(data);
                   const filterSet = localSaveOnly ? getSavedIdSet() : null;
-                  collectAssetsFromCustomization(data, filterSet);
-                } catch {}
+                  
+                  processData(data, {
+                      unlock: true,
+                      collectAssets: true,
+                      filterSet
+                  });
+                  
+                } catch (e) { console.warn(e); }
               })
               .catch(() => {})
               .finally(() => {
@@ -680,18 +622,23 @@
               .then(async (res) => {
                 try {
                   const data = await res.clone().json();
-                  if (localSaveOnly) deepForceUnlockedTrue(data);
+                  const path = toPath(u);
+                  const isRelevant = 
+                    path === CUSTOMIZATION ||
+                    path === SHOP_FEATURED ||
+                    path === SHOP_FEATURED_GENERIC ||
+                    path === SHOP_CREATOR ||
+                    path === SHOP_CONVEYOR;
+
                   const filterSet = localSaveOnly ? getSavedIdSet() : null;
-                  if (
-                    toPath(u) === CUSTOMIZATION ||
-                    toPath(u) === SHOP_FEATURED ||
-                    toPath(u) === SHOP_FEATURED_GENERIC ||
-                    toPath(u) === SHOP_CREATOR ||
-                    toPath(u) === SHOP_CONVEYOR
-                  ) {
-                    collectAssetsFromCustomization(data, filterSet);
-                  }
-                } catch {}
+                  
+                  processData(data, {
+                      unlock: localSaveOnly,
+                      collectAssets: isRelevant,
+                      filterSet
+                  });
+                  
+                } catch (e) { console.warn(e) }
               })
               .catch(() => {})
               .finally(() => {
@@ -767,11 +714,12 @@
             (init && init.method) || (input && input.method) || "GET",
           ).toUpperCase();
           
+          const path = toPath(url);
           const isAvatarUser =
-            isPath(url, AVATAR_USER) || 
-            (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
+            path === AVATAR_USER || 
+            (profileUserId && path === AVATAR_USER_PREFIX + profileUserId);
 
-          if (method === "GET" && isPath(url, ELITE_DAYS)) {
+          if (method === "GET" && path === ELITE_DAYS) {
             return new Response("999", {
               status: 200,
               headers: {
@@ -843,41 +791,45 @@
           const res = await baseFetch.apply(this, arguments);
           try {
             if (
-              isPath(url, CUSTOMIZATION) ||
-              isPath(url, SHOP_FEATURED) ||
-              isPath(url, SHOP_FEATURED_GENERIC) ||
-              isPath(url, SHOP_CREATOR) ||
-              isPath(url, SHOP_CONVEYOR) ||
-              isPath(url, PROFILES) ||
-              isPath(url, ELITE_DAYS) ||
-              isPrefix(url, RANKED_TEAMS_PREFIX)
+              path === CUSTOMIZATION ||
+              path === SHOP_FEATURED ||
+              path === SHOP_FEATURED_GENERIC ||
+              path === SHOP_CREATOR ||
+              path === SHOP_CONVEYOR ||
+              path === PROFILES ||
+              path === ELITE_DAYS ||
+              path.startsWith(RANKED_TEAMS_PREFIX)
             ) {
-              if (localSaveOnly && isPath(url, PROFILES)) {
+              if (localSaveOnly && path === PROFILES) {
                 await ensureAssetsReady();
               }
               const clone = res.clone();
               const text = await clone.text();
               let data = JSON.parse(text);
-              if (isPath(url, ELITE_DAYS)) data = forceEliteDays();
-              if (localSaveOnly) deepForceUnlockedTrue(data);
-              if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
-              if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
-              if (isPath(url, CUSTOMIZATION) && typeof data === "object") forceProductNull(data);
-              if (localSaveOnly && isPrefix(url, PROFILES)) forceEliteProfile(data, url);
-              if (localSaveOnly && isPrefix(url, RANKED_TEAMS_PREFIX)) {
-                await ensureAssetsReady();
-                applyRankedTeamBorder(data);
-              }
-              const filterSet = localSaveOnly ? getSavedIdSet() : null;
-              if (
-                isPath(url, CUSTOMIZATION) ||
-                isPath(url, SHOP_FEATURED) ||
-                isPath(url, SHOP_FEATURED_GENERIC) ||
-                isPath(url, SHOP_CREATOR) ||
-                isPath(url, SHOP_CONVEYOR)
-              ) {
-                collectAssetsFromCustomization(data, filterSet);
-              }
+              
+              if (path === ELITE_DAYS) return new Response("999", { status: 200 });
+
+              const opts = {
+                  unlock: localSaveOnly,
+                  ownership: localSaveOnly,
+                  emptyReqs: localSaveOnly,
+                  nullProduct: (path === CUSTOMIZATION),
+                  
+                  eliteProfile: localSaveOnly && (path.startsWith(PROFILES) || path.startsWith(RANKED_TEAMS_PREFIX)),
+                  isProfilesPath: path.startsWith(PROFILES),
+                  isRankedTeamPath: path.startsWith(RANKED_TEAMS_PREFIX),
+
+                      collectAssets: (
+                        path === CUSTOMIZATION ||
+                        path === SHOP_FEATURED ||
+                        path === SHOP_FEATURED_GENERIC ||
+                        path === SHOP_CREATOR ||
+                        path === SHOP_CONVEYOR
+                      ),
+                      filterSet: null
+                  };
+              
+              processData(data, opts);
 
               const headers = new Headers(res.headers);
               headers.delete("content-length");
@@ -912,7 +864,8 @@
         XMLHttpRequest.prototype.open = function (method, url) {
           this.__gg_method = String(method || "GET").toUpperCase();
           let nextUrl = String(url || "");
-          if (isPath(nextUrl, AVATAR_USER) || isPrefix(nextUrl, AVATAR_USER_PREFIX)) {
+          const path = toPath(nextUrl);
+          if (path === AVATAR_USER || path.startsWith(AVATAR_USER_PREFIX)) {
             nextUrl = bustUrl(nextUrl);
           }
           this.__gg_url = nextUrl;
@@ -924,8 +877,9 @@
           try {
             const method = this.__gg_method || "GET";
             const url = this.__gg_url || "";
+            const path = toPath(url);
 
-            if (method === "GET" && isPath(url, ELITE_DAYS)) {
+            if (method === "GET" && path === ELITE_DAYS) {
               const xhr = this;
               setTimeout(() => {
                 try {
@@ -975,7 +929,7 @@
             if (
               localSaveOnly &&
               method === "GET" &&
-              (isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId)) &&
+              (path === AVATAR_USER || (profileUserId && path === AVATAR_USER_PREFIX + profileUserId)) &&
               savedEquippedIds.length
             ) {
               const xhr = this;
@@ -1007,7 +961,7 @@
             if (
               !localSaveOnly &&
               method === "GET" &&
-              (isPath(url, AVATAR_USER) || (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId)) &&
+              (path === AVATAR_USER || (profileUserId && path === AVATAR_USER_PREFIX + profileUserId)) &&
               originalAvatarData
             ) {
               const xhr = this;
@@ -1035,40 +989,48 @@
               try {
                 if (this.readyState !== 4) return;
                 const rUrl = this.__gg_url || "";
+                const rPath = toPath(rUrl);
+                
                 if (
-                  !isPath(rUrl, CUSTOMIZATION) &&
-                  !isPath(rUrl, SHOP_FEATURED) &&
-                  !isPath(rUrl, SHOP_FEATURED_GENERIC) &&
-                  !isPath(rUrl, SHOP_CREATOR) &&
-                  !isPath(rUrl, SHOP_CONVEYOR) &&
-                  !isPath(rUrl, PROFILES) &&
-                  !isPath(rUrl, ELITE_DAYS) &&
-                  !isPrefix(rUrl, RANKED_TEAMS_PREFIX)
+                  rPath !== CUSTOMIZATION &&
+                  rPath !== SHOP_FEATURED &&
+                  rPath !== SHOP_FEATURED_GENERIC &&
+                  rPath !== SHOP_CREATOR &&
+                  rPath !== SHOP_CONVEYOR &&
+                  rPath !== PROFILES &&
+                  rPath !== ELITE_DAYS &&
+                  !rPath.startsWith(RANKED_TEAMS_PREFIX)
                 ) {
                   return;
                 }
 
               const raw = this.responseText;
               let data = JSON.parse(raw);
-              if (isPath(rUrl, ELITE_DAYS)) data = forceEliteDays();
-              if (localSaveOnly) deepForceUnlockedTrue(data);
-              if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
-              if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
-              if (isPath(rUrl, CUSTOMIZATION) && typeof data === "object") forceProductNull(data);
-              if (localSaveOnly && isPrefix(rUrl, PROFILES)) forceEliteProfile(data, rUrl);
-              if (localSaveOnly && isPrefix(rUrl, RANKED_TEAMS_PREFIX)) {
-                applyRankedTeamBorder(data);
+              
+              if (rPath === ELITE_DAYS) data = 999;
+              else {
+                  const opts = {
+                      unlock: localSaveOnly,
+                      ownership: localSaveOnly,
+                      emptyReqs: localSaveOnly,
+                      nullProduct: (rPath === CUSTOMIZATION),
+                      
+                      eliteProfile: localSaveOnly && (rPath.startsWith(PROFILES) || rPath.startsWith(RANKED_TEAMS_PREFIX)),
+                      isProfilesPath: rPath.startsWith(PROFILES),
+                      isRankedTeamPath: rPath.startsWith(RANKED_TEAMS_PREFIX),
+
+                      collectAssets: (
+                        rPath === CUSTOMIZATION ||
+                        rPath === SHOP_FEATURED ||
+                        rPath === SHOP_FEATURED_GENERIC ||
+                        rPath === SHOP_CREATOR ||
+                        rPath === SHOP_CONVEYOR
+                      ),
+                      filterSet: null
+                  };
+                  processData(data, opts);
               }
-              const filterSet = localSaveOnly ? getSavedIdSet() : null;
-              if (
-                isPath(rUrl, CUSTOMIZATION) ||
-                isPath(rUrl, SHOP_FEATURED) ||
-                isPath(rUrl, SHOP_FEATURED_GENERIC) ||
-                isPath(rUrl, SHOP_CREATOR) ||
-                isPath(rUrl, SHOP_CONVEYOR)
-              ) {
-                  collectAssetsFromCustomization(data, filterSet);
-                }
+              
                 const patched = JSON.stringify(data);
 
                 if (patched !== raw) {
