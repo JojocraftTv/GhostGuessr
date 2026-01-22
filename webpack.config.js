@@ -64,12 +64,18 @@ module.exports = (env, argv) => {
     devtool: isProduction ? false : 'inline-source-map',
     devServer: {
       static: {
-        directory: path.join(__dirname, 'dist'),
+        directory: path.join(__dirname, 'dist/local'),
       },
       compress: true,
       port: 8080,
       hot: false,
       liveReload: true,
+      client: {
+        webSocketURL: {
+          hostname: "0.0.0.0",
+          port: 8080,
+        },
+      },
       headers: {
         'Access-Control-Allow-Origin': '*',
       },

@@ -371,6 +371,21 @@
           return value;
         }
 
+        function forceProductNull(value) {
+          if (!value || typeof value !== "object") return value;
+          if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) {
+              value[i] = forceProductNull(value[i]);
+            }
+            return value;
+          }
+          if (value.hasOwnProperty("product")) value.product = null;
+          for (const k of Object.keys(value)) {
+            value[k] = forceProductNull(value[k]);
+          }
+          return value;
+        }
+
         function getEquippedBorderUrl() {
           for (const id of savedEquippedIds) {
             const asset = assetsById.get(id);
@@ -851,6 +866,7 @@
               if (localSaveOnly) deepForceUnlockedTrue(data);
               if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
               if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
+              if (isPath(url, CUSTOMIZATION) && typeof data === "object") forceProductNull(data);
               if (localSaveOnly && isPrefix(url, PROFILES)) forceEliteProfile(data, url);
               if (localSaveOnly && isPrefix(url, RANKED_TEAMS_PREFIX)) {
                 await ensureAssetsReady();
@@ -1042,6 +1058,7 @@
               if (localSaveOnly) deepForceUnlockedTrue(data);
               if (localSaveOnly && typeof data === "object") forceEmptyRequirements(data);
               if (localSaveOnly && typeof data === "object") forceEliteOwnership(data);
+              if (isPath(rUrl, CUSTOMIZATION) && typeof data === "object") forceProductNull(data);
               if (localSaveOnly && isPrefix(rUrl, PROFILES)) forceEliteProfile(data, rUrl);
               if (localSaveOnly && isPrefix(rUrl, RANKED_TEAMS_PREFIX)) {
                 applyRankedTeamBorder(data);
