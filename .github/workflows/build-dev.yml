@@ -1,4 +1,4 @@
-name: Build Dev (to dist/dev)
+name: Build Dev (Script)
 
 on:
   push:
