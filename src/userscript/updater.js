@@ -7,7 +7,7 @@
     return;
   }
 
-  const UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000;
+  const UPDATE_CHECK_INTERVAL = 60 * 1000;
   const STORAGE_KEY_LAST_CHECK = "gg_last_update_check";
   const STORAGE_KEY_DISMISSED_HASH = "gg_dismissed_update_hash";
   const STORAGE_KEY_CURRENT_HASH = "gg_current_script_hash";
@@ -75,38 +75,65 @@
   };
 
   async function checkForUpdates() {
-    if (!shouldCheckForUpdates()) {
-      return;
-    }
-
     try {
       const response = await fetch(GG.UPDATE_CHECK_URL, {
-        cache: 'no-cache'
+        cache: 'no-cache',
+        headers: {
+          'Range': 'bytes=0-1023'
+        }
       });
       
       if (!response.ok) {
-        updateLastCheckTime();
         return;
       }
       
-      const scriptContent = await response.text();
-      const remoteHash = await calculateHash(scriptContent);
-      const currentHash = getCurrentHash();
+      const scriptHeader = await response.text();
       
-      updateLastCheckTime();
+      const hashMatch = scriptHeader.match(/localStorage\.setItem\s*\(\s*['"]gg_current_script_hash['"]\s*,\s*['"]([\da-f]{64})['"]\s*\)/);
+      
+      if (!hashMatch || !hashMatch[1]) {
+        console.warn('[GG Updater] Could not extract hash from script header, falling back to full download');
+        
+        const fullResponse = await fetch(GG.UPDATE_CHECK_URL, {
+          cache: 'no-cache'
+        });
+        
+        if (!fullResponse.ok) {
+          return;
+        }
+        
+        const scriptContent = await fullResponse.text();
+        const remoteHash = await calculateHash(scriptContent);
+        const currentHash = getCurrentHash();
+        
+        if (!currentHash) {
+          setCurrentHash(remoteHash);
+          return;
+        }
+        
+        if (remoteHash !== currentHash && !isDismissed(remoteHash)) {
+          if (typeof GG.showUpdateNotification === 'function') {
+            GG.showUpdateNotification(remoteHash);
+          }
+        }
+        return;
+      }
+      
+      const remoteHash = hashMatch[1];
+      const currentHash = getCurrentHash();
       
       if (!currentHash) {
         setCurrentHash(remoteHash);
         return;
       }
       
-      if (remoteHash !== currentHash) {
+      if (remoteHash !== currentHash && !isDismissed(remoteHash)) {
         if (typeof GG.showUpdateNotification === 'function') {
           GG.showUpdateNotification(remoteHash);
         }
       }
     } catch (error) {
-      updateLastCheckTime();
+      console.error('[GG Updater] Update check failed:', error);
     }
   }
 

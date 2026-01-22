@@ -71,11 +71,9 @@ module.exports = (env, argv) => {
       hot: false,
       liveReload: true,
       client: {
-        webSocketURL: {
-          hostname: "0.0.0.0",
-          port: 8080,
-        },
+        webSocketURL: 'ws://localhost:8080/ws',
       },
+      allowedHosts: 'all',
       headers: {
         'Access-Control-Allow-Origin': '*',
       },

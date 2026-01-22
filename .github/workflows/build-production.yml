@@ -64,6 +64,19 @@ jobs:
           sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js|g' GhostGuessr.user.js
           sed -i "s|\[version\]|$VERSION|g" GhostGuessr.user.js
 
+      - name: Inject Hash into production script
+        run: |
+          FILE="dist/ghostguessr-core.user.js"
+          HASH=$(sha256sum "$FILE" | awk '{print $1}')
+          INJECT="try { localStorage.setItem('gg_current_script_hash', '$HASH'); } catch(e) {}"
+          
+          awk -v inject="$INJECT" '
+            { print } 
+            /\/\/ ==\/UserScript==/ { print inject }
+          ' "$FILE" > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+          
+          echo "Injected hash: $HASH"
+
       - name: Commit production build
         run: |
           set -e

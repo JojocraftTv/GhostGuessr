@@ -709,91 +709,99 @@
     banner.id = 'gg-update-banner';
     banner.style.cssText = `
       position: fixed;
-      top: 20px;
-      left: 20px;
-      right: auto;
-      width: auto;
-      max-width: 400px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 16px;
+      top: 24px;
+      left: 24px;
+      width: 340px;
+      background: rgba(26, 26, 46, 0.95);
+      backdrop-filter: blur(12px);
+      color: #fff;
+      padding: 20px;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       gap: 12px;
-      z-index: 2147483647;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-      font-family: 'Neo Sans', sans-serif;
-      animation: slideDown 0.3s ease-out;
+      z-index: 999999;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(121, 80, 229, 0.4);
+      font-family: "Neo Sans", "Segoe UI", sans-serif;
       border-radius: 12px;
+      animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
       pointer-events: auto;
-      border: 1px solid rgba(255,255,255,0.1);
     `;
 
     const style = document.createElement('style');
     style.textContent = `
-      @keyframes slideDown {
-        from { transform: translateY(-100%); }
-        to { transform: translateY(0); }
+      @keyframes slideIn {
+        from { transform: translateX(-120%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      .gg-close-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
       }
     `;
     document.head.appendChild(style);
 
-    const leftContent = document.createElement('div');
-    leftContent.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;';
+
+    const titleGroup = document.createElement('div');
+    titleGroup.style.cssText = 'display: flex; gap: 12px; align-items: center;';
 
     const icon = document.createElement('div');
     icon.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="20" height="20" rx="8" fill="#7950E5"/>
         <path d="M12 16L12 8" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M9 13L12 16L15 13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="18" cy="5" r="3" fill="#3bf7bf" stroke="none"/>
       </svg>
     `;
-    icon.style.display = 'flex';
-
-    const text = document.createElement('div');
-    text.innerHTML = `
-      <div style="font-weight: bold; font-size: 14px;">GhostGuessr Update Available!</div>
-      <div style="font-size: 12px; opacity: 0.9;">A new version is ready to download</div>
+    
+    const textGroup = document.createElement('div');
+    textGroup.innerHTML = `
+      <div style="font-weight: 800; font-size: 16px; letter-spacing: 0.5px;">UPDATE AVAILABLE</div>
+      <div style="font-size: 13px; color: #a4a4b5; margin-top: 2px;">GhostGuessr UserScript</div>
     `;
 
-    leftContent.appendChild(icon);
-    leftContent.appendChild(text);
+    titleGroup.appendChild(icon);
+    titleGroup.appendChild(textGroup);
 
-    const rightContent = document.createElement('div');
-    rightContent.style.cssText = 'display: flex; align-items: center; gap: 10px; width: 100%;';
-
-    const viewButton = document.createElement('button');
-    viewButton.textContent = 'View on GitHub';
-    viewButton.style.cssText = `
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.3);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
+    const closeBtn = document.createElement('div');
+    closeBtn.className = 'gg-close-btn';
+    closeBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #a4a4b5;">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    `;
+    closeBtn.style.cssText = `
       cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.2s;
-      width: 100%;
-      text-align: center;
+      padding: 4px;
+      border-radius: 50%;
+      display: flex;
+      transition: background 0.2s;
     `;
-    viewButton.onmouseover = () => {
-      viewButton.style.background = 'rgba(255,255,255,0.3)';
-    };
-    viewButton.onmouseout = () => {
-      viewButton.style.background = 'rgba(255,255,255,0.2)';
-    };
-    viewButton.onclick = () => {
-      window.open(GG.GITHUB_URL, '_blank');
+    closeBtn.onclick = () => {
+      if (typeof GG.dismissUpdate === 'function') {
+        GG.dismissUpdate(newHash);
+      } else {
+        banner.remove();
+      }
     };
 
-    rightContent.appendChild(viewButton);
+    header.appendChild(titleGroup);
+    header.appendChild(closeBtn);
 
-    banner.appendChild(leftContent);
-    banner.appendChild(rightContent);
+    const message = document.createElement('div');
+    message.style.cssText = 'background: rgba(121, 80, 229, 0.1); border-radius: 8px; padding: 12px; border: 1px solid rgba(121, 80, 229, 0.2);';
+    message.innerHTML = `
+      <div style="display: flex; gap: 10px; align-items: flex-start;">
+        <div style="font-size: 13px; line-height: 1.5; color: #eaeaef;">
+          <span style="color: #7950E5; font-weight: 700;">Please re-patch!</span><br>
+          Open the <b>GhostGuessr Patcher</b> on your desktop to install the latest version.
+        </div>
+      </div>
+    `;
+
+    banner.appendChild(header);
+    banner.appendChild(message);
 
     document.body.appendChild(banner);
   };

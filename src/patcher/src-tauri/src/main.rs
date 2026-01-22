@@ -137,9 +137,25 @@ fn patch_inner(
   extract_all(&app_asar, &extracted).map_err(|e| format!("Asar extract failed: {e}"))?;
 
   let mut script = fetch_remote_script()?;
-  let script_hash = compute_string_hash(&script);
-  let hash_inject = format!("try {{ localStorage.setItem('gg_current_script_hash', '{}'); }} catch(e) {{}}\n", script_hash);
-  script.insert_str(0, &hash_inject);
+  
+  let existing_hash_pattern = "localStorage.setItem('gg_current_script_hash', '";
+  let mut script_hash = String::new();
+  
+  if let Some(start_idx) = script.find(existing_hash_pattern) {
+      let hash_start = start_idx + existing_hash_pattern.len();
+      if hash_start + 64 <= script.len() {
+          let potential_hash = &script[hash_start..hash_start + 64];
+          if potential_hash.chars().all(|c| c.is_ascii_hexdigit()) {
+              script_hash = potential_hash.to_string();
+          }
+      }
+  }
+
+  if script_hash.is_empty() {
+      script_hash = compute_string_hash(&script);
+      let hash_inject = format!("try {{ localStorage.setItem('gg_current_script_hash', '{}'); }} catch(e) {{}}\n", script_hash);
+      script.insert_str(0, &hash_inject);
+  }
 
   fs::write(&ghost_script, script)
     .map_err(|e| format!("Failed to write ghost script: {e}"))?;
