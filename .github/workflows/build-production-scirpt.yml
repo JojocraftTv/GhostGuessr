@@ -63,7 +63,7 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           sed -i 's|http://localhost:8080/ghostguessr-core.user.js|https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js|g' GhostGuessr.user.js
           sed -i "s|\[version\]|$VERSION|g" GhostGuessr.user.js
-          sed -i 's|// ==UserScript==|// ==UserScript==\n// @updateURL   https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js\n// @downloadURL https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js|g' GhostGuessr.user.js
+          sed -i 's|// @run-at document-start|// @run-at document-start\n// @updateURL   https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js\n// @downloadURL https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js|g' GhostGuessr.user.js
       - name: Inject Hash into production script
         run: |
           FILE="dist/ghostguessr-core.user.js"
