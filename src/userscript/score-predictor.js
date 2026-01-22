@@ -5,31 +5,60 @@
 
   let scorePredictorElement = null;
 
-  function calculateDistance(lat1, lng1, lat2, lng2) {
-    try {
-      if (typeof google !== 'undefined' && google.maps && google.maps.geometry) {
-        const point1 = new google.maps.LatLng(lat1, lng1);
-        const point2 = new google.maps.LatLng(lat2, lng2);
-        return google.maps.geometry.spherical.computeDistanceBetween(point1, point2);
-      }
-    } catch (e) {
-      console.warn('[GG Score Predictor] Google Maps geometry not available, using fallback');
-    }
-    
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-
   let lastFetchedGameToken = null;
   const DEFAULT_MAP_SIZE = 14916862;
   GG.currentMapData = { maxErrorDistance: DEFAULT_MAP_SIZE };
+
+  const globalTarget = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  
+  const originalFetch = globalTarget.fetch;
+  globalTarget.fetch = async function(...args) {
+    let url = args[0];
+    if (typeof url !== 'string' && url && url.url) {
+        url = url.url;
+    }
+    url = url ? url.toString() : '';
+    
+    if (url.includes('/api/v4/geo-coding/terrain')) {
+        try {
+            const options = args[1];
+            if (options && options.body) {
+                const body = JSON.parse(options.body);
+                if (body && typeof body.lat === 'number' && typeof body.lng === 'number') {
+                    updateScorePredictor(body.lat, body.lng, true);
+                }
+            }
+        } catch (e) {
+             console.warn('[GG Score Predictor] Error intercepting terrain fetch:', e);
+        }
+    }
+    
+    return originalFetch.apply(this, args);
+  };
+
+  let persistenceObserver = null;
+
+  function ensurePredictorPersistence(mapContainer) {
+      if (persistenceObserver) return;
+      if (!mapContainer) return;
+
+      persistenceObserver = new MutationObserver((mutations) => {
+          if (!mapContainer.isConnected) {
+              persistenceObserver.disconnect();
+              persistenceObserver = null;
+              return;
+          }
+
+          if (GG.settings.showScorePredictor && scorePredictorElement && !mapContainer.contains(scorePredictorElement)) {
+              try {
+                  mapContainer.appendChild(scorePredictorElement);
+              } catch (e) {}
+          }
+      });
+
+      persistenceObserver.observe(mapContainer, { childList: true, subtree: false });
+  }
+
 
   async function fetchMapDetails(token) {
     if (!token) return;
@@ -62,18 +91,6 @@
     const score = Math.round(5000 * Math.exp(-10 * distanceMeters / mapSize));
     
     return Math.max(0, Math.min(5000, score));
-  }
-
-  function formatDistance(meters) {
-    const km = meters / 1000;
-    
-    if (km < 1) {
-      return `${Math.round(meters)} m`;
-    } else if (km < 10) {
-      return `${km.toFixed(2)} km`;
-    } else {
-      return `${Math.round(km)} km`;
-    }
   }
 
   function createScorePredictorUI() {
@@ -148,12 +165,27 @@
 
     const refLat = GG.initialCoords.lat || GG.coords.lat;
     const refLng = GG.initialCoords.lng || GG.coords.lng;
-    if (!refLat || !refLng) return;
+    
+    if (!refLat || !refLng) {
+        return;
+    }
 
     if (GG.settings.showScorePredictor) {
       createScorePredictorUI();
+      
+      const mapContainer = GG.getMapContainer();
 
-      const distance = calculateDistance(refLat, refLng, guessLat, guessLng);
+      if (mapContainer) {
+          if (scorePredictorElement && !mapContainer.contains(scorePredictorElement)) {
+               mapContainer.appendChild(scorePredictorElement);
+          }
+          
+          if (typeof ensurePredictorPersistence === 'function') {
+              ensurePredictorPersistence(mapContainer);
+          }
+      }
+
+      const distance = GG.calculateDistance(refLat, refLng, guessLat, guessLng);
       const score = calculateScore(distance);
 
       const scoreTextEl = document.getElementById('gg-score-text');
@@ -168,13 +200,13 @@
           separatorEl.style.display = 'none';
         } else if (displayMode === 'distance') {
           scoreTextEl.style.display = 'none';
-          distanceTextEl.textContent = formatDistance(distance);
+          distanceTextEl.textContent = GG.formatDistance(distance);
           distanceTextEl.style.display = 'block';
           separatorEl.style.display = 'none';
         } else {
           scoreTextEl.style.display = 'block';
           scoreTextEl.textContent = `~${score.toLocaleString()}`;
-          distanceTextEl.textContent = formatDistance(distance);
+          distanceTextEl.textContent = GG.formatDistance(distance);
           distanceTextEl.style.display = 'block';
           separatorEl.style.display = 'block';
         }
@@ -208,10 +240,7 @@
   }
 
   GG.setupScorePredictorListeners = function() {
-    const mapContainer = document.querySelector('[class*="guess-map_canvas__"]') ||
-                        document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-                        document.querySelector('[data-qa="guess-map-canvas"]') ||
-                        document.querySelector('.gm-style');
+    const mapContainer = GG.getMapContainer();
     
     if (!mapContainer) return;
 
@@ -237,7 +266,7 @@
       const guessMarkers = Array.from(document.querySelectorAll('[data-qa="guess-marker"], [class*="map-pin_mapPin__"]'));
       
       if (guessMarkers.length === 0) {
-        hideScorePredictor();
+        // Do not hide immediately to prevent flickering if marker is briefly removed by React
         return;
       }
 
@@ -257,16 +286,11 @@
         const bounds = gmap.getBounds();
         if (!bounds) return;
 
-        const findReactProps = (dom) => {
-          const key = Object.keys(dom).find(k => k.startsWith('__reactFiber$'));
-          return key ? dom[key] : null;
-        };
-
         let nearestMarker = null;
         let nearestDistance = Infinity;
 
         for (const guessMarker of guessMarkers) {
-          const fiber = findReactProps(guessMarker);
+          const fiber = GG.findReactFiber(guessMarker);
           let current = fiber;
           let guessLat = null;
           let guessLng = null;
@@ -305,7 +329,7 @@
           }
 
           if (guessLat !== null && guessLng !== null) {
-            const distance = calculateDistance(refLat, refLng, guessLat, guessLng);
+            const distance = GG.calculateDistance(refLat, refLng, guessLat, guessLng);
             if (distance < nearestDistance) {
               nearestDistance = distance;
               nearestMarker = { lat: guessLat, lng: guessLng };
@@ -322,8 +346,7 @@
     }
 
     function installMapClickHandler() {
-      const guessMapElement = document.querySelector('[class*="guess-map_canvas__"]') ||
-                             document.querySelector('[class*="run-game-guess-map-contents_canvas__"]');
+      const guessMapElement = GG.getMapContainer();
       
       if (!guessMapElement) {
         setTimeout(installMapClickHandler, 500);
@@ -331,15 +354,12 @@
       }
 
       try {
-        const reactKeys = Object.keys(guessMapElement);
-        const reactKey = reactKeys.find(key => key.startsWith("__reactFiber$"));
+        const elementProps = GG.findReactFiber(guessMapElement);
         
-        if (!reactKey) {
+        if (!elementProps) {
           setTimeout(installMapClickHandler, 500);
           return;
         }
-
-        const elementProps = guessMapElement[reactKey];
         
         if (!elementProps?.return?.return?.memoizedProps?.map?.__e3_?.click) {
           setTimeout(installMapClickHandler, 500);
@@ -370,23 +390,12 @@
       }
     }
 
-    installMapClickHandler();
+    GG.updateScorePredictorFromState = function() {
+       lastUpdateTime = 0;
+       updateFromMarkerPosition();
+    };
 
-    const gmap = GG.getGoogleMap();
-    if (gmap && !GG._areGoogleMapListenersInstalled) {
-      GG._areGoogleMapListenersInstalled = true;
-      
-      const triggerUpdate = () => {
-        setTimeout(() => {
-          lastUpdateTime = 0;
-          updateFromMarkerPosition();
-        }, 10);
-      };
-      
-      ['click', 'mouseup', 'mouseover', 'mouseout', 'mousemove'].forEach(eventName => {
-        gmap.addListener(eventName, triggerUpdate);
-      });
-    }
+    installMapClickHandler();
   };
 
   GG.toggleScorePredictor = function() {
@@ -397,6 +406,4 @@
       hideScorePredictor();
     }
   };
-
-  console.log("[GG Score Predictor] Initialized");
 })();

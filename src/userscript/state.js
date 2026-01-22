@@ -63,11 +63,13 @@
   GG.streetviewMarker = null;
   GG.connectionLine = null;
   GG.currentRoundId = null;
+  GG.currentRoundNumber = 0;
   GG.settings = { ...GG.DEFAULT_SETTINGS };
   GG.gmap = null;
   GG.toggleButton = null;
   GG.buttonCreated = false;
   GG.hotkeyInput = null;
   GG.markerRetryId = null;
+  GG.lastMapUpdate = 0;
   GG.settingsLoaded = false;
 })();

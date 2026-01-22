@@ -8,6 +8,73 @@
     const match = url.match(/\/game\/([^\/]+)/);
     return match ? match[1] : null;
   }
+  
+  const globalTarget = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+  const newRoundFetch = globalTarget.fetch;
+  globalTarget.fetch = async function(...args) {
+    let url = args[0];
+    if (typeof url !== 'string' && url && url.url) {
+        url = url.url;
+    }
+    url = url ? url.toString() : '';
+    const isGameApi = url.includes('/api/v3/games/');
+    
+    const response = await newRoundFetch.apply(this, args);
+
+    if (isGameApi && response.ok) {
+        try {
+            const clone = response.clone();
+            clone.json().then(data => {
+                if (!data) return;
+                
+                const newToken = data.token;
+                const newRoundNumber = data.round;
+                
+                let shouldReset = false;
+                let newCoords = null;
+
+                if (data.rounds && Array.isArray(data.rounds) && data.rounds.length > 0) {
+                     const currentRound = data.rounds[data.rounds.length - 1];
+                     if (currentRound && typeof currentRound.lat === 'number' && typeof currentRound.lng === 'number') {
+                         newCoords = { lat: currentRound.lat, lng: currentRound.lng };
+                     }
+                }
+                
+                if (newToken && newToken !== GG.currentRoundId) {
+                    GG.currentRoundId = newToken;
+                    GG.currentRoundNumber = newRoundNumber || 1;
+                    shouldReset = true;
+                } 
+                else if (newRoundNumber && newRoundNumber !== GG.currentRoundNumber) {
+                    GG.currentRoundNumber = newRoundNumber;
+                    shouldReset = true;
+                }
+                
+                if (shouldReset) {
+                    const TIME_THRESHOLD = 3000;
+                    const recentUpdate = (Date.now() - (GG.lastMapUpdate || 0)) < TIME_THRESHOLD;
+                    
+                    if (newCoords) {
+                         GG.resetRoundState(newCoords);
+                    } else if (recentUpdate) {
+                         GG.resetRoundState(GG.initialCoords);
+                    } else {
+                         GG.resetRoundState();
+                    }
+
+                    if ((newCoords || recentUpdate) && GG.settings.enabled) {
+                         GG.placeMarker();
+                    }
+                }
+            }).catch(e => console.warn('[GG Round Detection] Failed to parse JSON:', e));
+        } catch (e) {
+            console.warn('[GG Round Detection] Error processing fetch:', e);
+        }
+    }
+    
+    return response;
+  }
 
   const originalOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
@@ -27,51 +94,30 @@
             const newLat = Number.parseFloat(split[0]);
             const newLng = Number.parseFloat(split[1]);
 
-            const roundId = detectRoundId();
-            const isNewRound = roundId && roundId !== GG.currentRoundId;
             const isFirstCoords = !GG.initialCoords.lat || !GG.initialCoords.lng;
 
             let distanceKm = 0;
             if (GG.coords.lat && GG.coords.lng) {
-                 const R = 6371; 
-                 const dLat = (newLat - GG.coords.lat) * Math.PI / 180;
-                 const dLng = (newLng - GG.coords.lng) * Math.PI / 180;
-                 const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                           Math.cos(GG.coords.lat * Math.PI / 180) * Math.cos(newLat * Math.PI / 180) * 
-                           Math.sin(dLng/2) * Math.sin(dLng/2);
-                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                 distanceKm = R * c;
+                 distanceKm = GG.calculateDistance(GG.coords.lat, GG.coords.lng, newLat, newLng) / 1000;
             }
             
-            const isSignificantJump = distanceKm > 5; 
-            
-            if (isNewRound || isFirstCoords || isSignificantJump) {
-              if (roundId) GG.currentRoundId = roundId;
+            if (newLat === 0 && newLng === 0) return;
+
+            const currentUrlId = detectRoundId();
+            const isUrlChanged = currentUrlId && currentUrlId !== GG.currentRoundId;
+            const isSignificantJump = distanceKm > 20; 
+
+            if (isUrlChanged || isSignificantJump) {
+                 
+                 GG.resetRoundState({ lat: newLat, lng: newLng });
+                 if (currentUrlId) GG.currentRoundId = currentUrlId;
+                 
+                 GG.lastMapUpdate = Date.now();
+            } else if (isFirstCoords) {
               GG.initialCoords.lat = newLat;
               GG.initialCoords.lng = newLng;
-
-              if (GG.marker) {
-                GG.marker.setMap(null);
-                GG.marker = null;
-              }
-              
-              if (isNewRound || isSignificantJump) {
-                  if (GG.streetviewMarker) {
-                    GG.streetviewMarker.setMap(null);
-                    GG.streetviewMarker = null;
-                  }
-                  if (GG.connectionLine) {
-                    GG.connectionLine.setMap(null);
-                    GG.connectionLine = null;
-                  }
-                  if (GG._scorePredictorObserver) {
-                    GG._scorePredictorObserver.disconnect();
-                    GG._scorePredictorObserver = null;
-                  }
-              }
+              GG.lastMapUpdate = Date.now();
             }
-
-            if (newLat === 0 && newLng === 0) return;
 
             GG.coords.lat = newLat;
             GG.coords.lng = newLng;
@@ -88,18 +134,7 @@
   };
 
   GG.getGoogleMap = function () {
-    let container =
-      document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-      document.querySelector('[data-qa="guess-map-canvas"]') ||
-      document.querySelector('[class*="game-layout_map__"]');
-
-    if (!container) {
-         const gmStyle = document.querySelector('.gm-style');
-         if (gmStyle && gmStyle.parentElement) {
-             container = gmStyle.parentElement;
-         }
-    }
+    let container = GG.getMapContainer();
 
     if (!container) return null;
 
@@ -109,11 +144,8 @@
     
     GG.gmap = null;
     try {
-      let reactKey = Object.keys(container).find((key) =>
-        key.startsWith("__reactFiber$"),
-      );
-      if (reactKey) {
-        let fiber = container[reactKey];
+      let fiber = GG.findReactFiber(container);
+      if (fiber) {
         let current = fiber;
         while (current) {
           if (
@@ -141,7 +173,7 @@
       GG.marker = null;
     }
     try {
-      if (typeof google !== "undefined" && google.maps) {
+      if (GG.isGoogleMapsAvailable()) {
         let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
         let icon = {
           path: google.maps.SymbolPath.CIRCLE,
@@ -177,7 +209,7 @@
     if (!GG.marker || !GG.marker.setIcon) return;
 
     try {
-      if (typeof google !== "undefined" && google.maps) {
+      if (GG.isGoogleMapsAvailable()) {
         let icon = {
           path: google.maps.SymbolPath.CIRCLE,
           fillColor: GG.hexToRgba(GG.settings.markerColor, GG.settings.opacity),
@@ -203,7 +235,7 @@
       GG.streetviewMarker = null;
     }
     try {
-      if (typeof google !== "undefined" && google.maps) {
+      if (GG.isGoogleMapsAvailable()) {
         const opacity = GG.settings.streetviewMarkerOpacity ?? GG.settings.opacity;
         let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
         let icon = {
@@ -232,7 +264,7 @@
     if (!GG.streetviewMarker || !GG.streetviewMarker.setIcon) return;
 
     try {
-      if (typeof google !== "undefined" && google.maps) {
+      if (GG.isGoogleMapsAvailable()) {
         const opacity = GG.settings.streetviewMarkerOpacity ?? GG.settings.opacity;
         let icon = {
           path: google.maps.SymbolPath.CIRCLE,
@@ -252,7 +284,7 @@
     if (!GG.streetviewMarker) return;
     if (!GG.coords.lat || !GG.coords.lng) return;
     try {
-      if (typeof google !== "undefined" && google.maps && GG.streetviewMarker.setPosition) {
+      if (GG.isGoogleMapsAvailable() && GG.streetviewMarker.setPosition) {
         let position = new google.maps.LatLng(GG.coords.lat, GG.coords.lng);
         GG.streetviewMarker.setPosition(position);
       }
@@ -274,7 +306,7 @@
     if (!GG.gmap) return;
 
     try {
-      if (typeof google !== "undefined" && google.maps) {
+      if (GG.isGoogleMapsAvailable()) {
         const path = [
           new google.maps.LatLng(guessLat, guessLng),
           new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng),
@@ -299,10 +331,7 @@
   };
 
   GG.createDivMarker = function () {
-    let container =
-      document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-      document.querySelector('[data-qa="guess-map-canvas"]');
+    let container = GG.getMapContainer();
     if (!container) return;
     let existing = document.getElementById("geo-div-marker");
     if (existing) existing.remove();
@@ -341,8 +370,7 @@
         } else {
           try {
             if (
-              typeof google !== "undefined" &&
-              google.maps &&
+              GG.isGoogleMapsAvailable() &&
               GG.marker.setPosition
             ) {
               let position = new google.maps.LatLng(GG.initialCoords.lat, GG.initialCoords.lng);
@@ -377,13 +405,7 @@
       GG.divMarkerActive = false;
     }
 
-    let isOnMapView =
-      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
-      document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-      document.querySelector('[data-qa="guess-map-canvas"]') || 
-      document.querySelector('.gm-style');
-    if (!isOnMapView) return;
+    if (!GG.getMapContainer()) return;
 
     GG.placeMarker();
 
@@ -404,13 +426,7 @@
   GG.toggleMarker = function () {
     if (!GG.coords.lat || !GG.coords.lng) return;
 
-    let isOnMapView =
-      document.querySelector('[class*="coordinate-guess_mapContainer__"]') ||
-      document.querySelector('[class*="guess-map_canvas__"]') ||
-      document.querySelector('[class*="run-game-guess-map-contents_canvas__"]') ||
-      document.querySelector('[data-qa="guess-map-canvas"]') ||
-      document.querySelector('.gm-style');
-    if (!isOnMapView) return;
+    if (!GG.getMapContainer()) return;
 
     GG.settings.enabled = !GG.settings.enabled;
     GG.saveSettings();

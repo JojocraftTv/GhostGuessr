@@ -767,10 +767,6 @@
             (init && init.method) || (input && input.method) || "GET",
           ).toUpperCase();
           
-          if (url.includes('api/v4') || url.includes('api/v3')) {
-            console.log('[GG Skinchanger Hook] Fetch intercepted:', method, toPath(url), 'localSaveOnly:', localSaveOnly);
-          }
-          
           const isAvatarUser =
             isPath(url, AVATAR_USER) || 
             (profileUserId && toPath(url) === AVATAR_USER_PREFIX + profileUserId);
