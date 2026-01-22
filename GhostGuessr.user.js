@@ -1,4 +1,6 @@
 // ==UserScript==
+// @updateURL   https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js
+// @downloadURL https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main/dist/GhostGuessr.user.js
 // @name GhostGuessr
 // @description Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.
 // @version 2.3.3
