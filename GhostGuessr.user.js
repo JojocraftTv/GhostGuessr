@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name GhostGuessr
 // @description Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.
-// @version 2.3.1
+// @version 2.3.2
 // @author VellusFox, Niceas
 // @match https://www.geoguessr.com/*
 // @grant GM_setValue
