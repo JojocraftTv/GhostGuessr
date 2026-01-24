@@ -19,6 +19,11 @@
           GG.createToggleButton();
         }
       }
+
+      if (typeof GG.addGithubLink === "function") {
+        GG.addGithubLink();
+      }
+
       if (GG.settings.enabled) {
         GG.ensureMarkerVisible();
       }

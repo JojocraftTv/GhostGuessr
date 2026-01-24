@@ -1416,6 +1416,68 @@
     hoverCatch.dataset.ggZFixed = "1";
   };
 
+  GG.addGithubLink = function () {
+    if (document.getElementById("gg-github-link")) return;
+
+    const header = document.querySelector('[class*="header-desktop_root__"]');
+    if (!header) return;
+
+    const rightSection = header.querySelector(
+      '[class*="header-desktop_desktopSectionRight__"]',
+    );
+    if (!rightSection) return;
+
+    const refLink = header.querySelector(
+      '[class*="menu-item-secondary_container__"]',
+    );
+    
+    const link = document.createElement("a");
+    link.id = "gg-github-link";
+    link.href = "https://github.com/JojocraftTv/GhostGuessr";
+    link.target = "_blank";
+    link.style.textDecoration = "none";
+    link.style.cursor = "pointer";
+    link.style.marginLeft = "auto"; 
+    link.style.marginRight = "20px"; 
+    link.style.alignSelf = "center";
+    link.style.zIndex = "100";
+    link.style.display = "flex";
+    link.style.alignItems = "center";
+    link.style.gap = "8px";
+    
+    const icon = document.createElement("img");
+    icon.src = "https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/icons/GhostGuessr.png";
+    icon.style.width = "20px";
+    icon.style.height = "20px";
+    icon.style.display = "block";
+    link.appendChild(icon);
+
+    const text = document.createElement("span");
+    text.textContent = "GhostGuessr";
+    link.appendChild(text);
+    
+    link.style.color = "#FFFFFF";
+    link.style.fontWeight = "bold";
+    link.style.textTransform = "uppercase";
+    link.style.fontSize = "12px";
+    
+    if (refLink) {
+      const style = window.getComputedStyle(refLink);
+      link.style.fontFamily = style.fontFamily;
+      link.style.fontSize = style.fontSize;
+      link.style.fontWeight = style.fontWeight;
+      link.style.letterSpacing = style.letterSpacing;
+      
+      link.style.opacity = "0.7"; 
+      link.style.transition = "opacity 0.2s";
+      
+      link.addEventListener("mouseenter", () => link.style.opacity = "1");
+      link.addEventListener("mouseleave", () => link.style.opacity = "0.7");
+    }
+
+    header.insertBefore(link, rightSection);
+  };
+
   GG.injectSkinchangerToggle = function (initialLocalSaveOnly) {
     try {
       const host = document.querySelector(

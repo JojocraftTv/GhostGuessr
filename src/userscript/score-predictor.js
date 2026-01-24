@@ -266,7 +266,6 @@
       const guessMarkers = Array.from(document.querySelectorAll('[data-qa="guess-marker"], [class*="map-pin_mapPin__"]'));
       
       if (guessMarkers.length === 0) {
-        // Do not hide immediately to prevent flickering if marker is briefly removed by React
         return;
       }
 

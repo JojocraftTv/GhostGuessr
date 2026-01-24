@@ -169,6 +169,7 @@
         const CUSTOMIZATION = "/api/v4/customization";
         const SHOP_FEATURED = "/api/v4/webshop/featured-deals/world-championship";
         const SHOP_FEATURED_GENERIC = "/api/v4/webshop/featured-deals";
+        const SHOP_COMMON = "/api/v4/webshop/common-products";
         const SHOP_CREATOR = "/api/v4/webshop/creator-shop/products";
         const SHOP_CONVEYOR = "/api/v4/webshop/conveyor-belt";
         const PROFILES = "/api/v3/profiles/";
@@ -410,19 +411,27 @@
                     }
                     return;
                 }
+                const looksLikeAsset = 
+                    (typeof obj.slot === "number") ||
+                    (typeof obj.rarity === "string") ||
+                    (typeof obj.id === "string" && (typeof obj.icon === "string" || typeof obj.image === "string"));
 
-                if (opts.unlock) {
-                    if (obj.hasOwnProperty("unlocked")) obj.unlocked = true;
-                }
-
-                if (opts.ownership) {
-                     if (obj.hasOwnProperty("isEliteExclusive")) obj.isEliteExclusive = false;
-                     if (obj.hasOwnProperty("isOwned")) obj.isOwned = true;
-                     if (obj.hasOwnProperty("isInUserInventory")) obj.isInUserInventory = true;
-                }
-
-                if (opts.emptyReqs) {
-                    if (Array.isArray(obj.requirements)) obj.requirements = [];
+                if (looksLikeAsset) {
+                    if (opts.unlock) obj.unlocked = true;
+                    if (opts.ownership) {
+                        obj.isEliteExclusive = false;
+                        obj.isOwned = true;
+                        obj.isInUserInventory = true;
+                    }
+                    if (opts.emptyReqs) obj.requirements = [];
+                } else {
+                    if (opts.unlock && obj.hasOwnProperty("unlocked")) obj.unlocked = true;
+                    if (opts.ownership) {
+                         if (obj.hasOwnProperty("isEliteExclusive")) obj.isEliteExclusive = false;
+                         if (obj.hasOwnProperty("isOwned")) obj.isOwned = true;
+                         if (obj.hasOwnProperty("isInUserInventory")) obj.isInUserInventory = true;
+                    }
+                    if (opts.emptyReqs && Array.isArray(obj.requirements)) obj.requirements = [];
                 }
 
                 if (opts.nullProduct) {
@@ -591,6 +600,7 @@
             CUSTOMIZATION,
             SHOP_FEATURED,
             SHOP_FEATURED_GENERIC,
+            SHOP_COMMON,
             SHOP_CREATOR,
             SHOP_CONVEYOR,
           ].map((u) => (u.includes("?") ? u + "&" + bust : u + "?" + bust));
@@ -627,6 +637,7 @@
                     path === CUSTOMIZATION ||
                     path === SHOP_FEATURED ||
                     path === SHOP_FEATURED_GENERIC ||
+                    path === SHOP_COMMON ||
                     path === SHOP_CREATOR ||
                     path === SHOP_CONVEYOR;
 
@@ -794,6 +805,7 @@
               path === CUSTOMIZATION ||
               path === SHOP_FEATURED ||
               path === SHOP_FEATURED_GENERIC ||
+              path === SHOP_COMMON ||
               path === SHOP_CREATOR ||
               path === SHOP_CONVEYOR ||
               path === PROFILES ||
@@ -823,6 +835,7 @@
                         path === CUSTOMIZATION ||
                         path === SHOP_FEATURED ||
                         path === SHOP_FEATURED_GENERIC ||
+                        path === SHOP_COMMON ||
                         path === SHOP_CREATOR ||
                         path === SHOP_CONVEYOR
                       ),
@@ -995,6 +1008,7 @@
                   rPath !== CUSTOMIZATION &&
                   rPath !== SHOP_FEATURED &&
                   rPath !== SHOP_FEATURED_GENERIC &&
+                  rPath !== SHOP_COMMON &&
                   rPath !== SHOP_CREATOR &&
                   rPath !== SHOP_CONVEYOR &&
                   rPath !== PROFILES &&
@@ -1023,6 +1037,7 @@
                         rPath === CUSTOMIZATION ||
                         rPath === SHOP_FEATURED ||
                         rPath === SHOP_FEATURED_GENERIC ||
+                        rPath === SHOP_COMMON ||
                         rPath === SHOP_CREATOR ||
                         rPath === SHOP_CONVEYOR
                       ),
