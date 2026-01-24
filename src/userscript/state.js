@@ -55,6 +55,10 @@
     streetviewMarkerSize: 6,
     streetviewMarkerOutlineWidth: 2,
     streetviewMarkerOpacity: 0.7,
+    gameMode: "normal",
+    safetyOutlineColor: "#10b981",
+    safetyOutlineOpacity: 0.8,
+    safetyOutlineWidth: 2,
   };
 
   GG.coords = { lat: 0, lng: 0 };

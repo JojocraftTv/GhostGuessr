@@ -578,6 +578,180 @@
     return container;
   };
 
+  GG.createColorPicker = (label, settingKey, colorKey, outlineKey, h3) => {
+    const colorContainer = document.createElement("div");
+    colorContainer.className = "flex_flex__Rxtgm flex_direction__Fa3Gs flex_gap__sXfgm flex_justify__2rGZO flex_align__PRoee";
+    colorContainer.style.cssText = "display: flex; flex-direction: column; gap: 4px; justify-content: flex-start; align-items: stretch; flex: 1;";
+
+    const colorLabel = document.createElement("label");
+    colorLabel.className = "label_label__9xkbh shared_white60Variant__EC173 shared_boldWeight__U2puG label_italic__LM62Y";
+    colorLabel.style.cssText = "font-size: 14px; line-height: 1.4; color: rgba(255, 255, 255, 0.6); font-weight: 600; font-style: italic;";
+    colorLabel.textContent = label;
+
+    const colorInputContainer = document.createElement("div");
+    colorInputContainer.className = "flex_flex__Rxtgm flex_direction__Fa3Gs flex_gap__sXfgm flex_justify__2rGZO flex_align__PRoee";
+    colorInputContainer.style.cssText = "display: flex; flex-direction: row; gap: 8px; justify-content: flex-start; align-items: center; position: relative;";
+
+    const colorPreview = document.createElement("div");
+    colorPreview.style.cssText = `
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      background: ${GG.settings[settingKey]};
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+    `;
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = GG.settings[settingKey];
+    colorInput.style.cssText = `
+      width: 32px;
+      height: 32px;
+      opacity: 0;
+      position: absolute;
+      cursor: pointer;
+    `;
+
+    const colorHex = document.createElement("label");
+    colorHex.className = "label_label__9xkbh shared_boldWeight__U2puG label_italic__LM62Y";
+    colorHex.style.cssText = "font-size: 14px; line-height: 1.4; font-weight: 600; font-style: italic; min-width: 70px; color: #fff;";
+    colorHex.textContent = GG.settings[settingKey];
+
+    colorInput.addEventListener("input", function () {
+      GG.settings[settingKey] = this.value;
+      colorPreview.style.background = this.value;
+      colorHex.textContent = this.value;
+      
+      if (h3 && settingKey === colorKey) {
+        h3.style.color = this.value;
+      }
+
+      GG.saveSettings();
+      if (typeof GG.updateMarkerStyle === 'function') GG.updateMarkerStyle();
+      if (typeof GG.updateStreetviewMarkerStyle === 'function') GG.updateStreetviewMarkerStyle();
+      if (typeof GG.updateSafetyOutlineStyle === 'function') GG.updateSafetyOutlineStyle();
+    });
+
+    colorInputContainer.appendChild(colorPreview);
+    colorInputContainer.appendChild(colorInput);
+    colorContainer.appendChild(colorLabel);
+    colorContainer.appendChild(colorInputContainer);
+    colorContainer.appendChild(colorHex);
+
+    return colorContainer;
+  };
+
+  GG.createSlider = (labelText, settingKey, min, max, step, unit, iconFn) => {
+    const sliderContainer = document.createElement("div");
+    sliderContainer.className = "slider-option_wrapper__3gsTQ";
+    sliderContainer.style.cssText = "margin-bottom: 16px; display: flex; align-items: center; gap: 12px;";
+
+    const icon = document.createElement("div");
+    icon.className = "slider-option_icon__qtnY8";
+    icon.style.cssText = "flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;";
+    if (typeof iconFn === 'function') {
+         icon.innerHTML = iconFn(GG.settings[settingKey]);
+    } else {
+         icon.innerHTML = iconFn || ''; 
+    }
+
+    const label = document.createElement("div");
+    label.className = "slider-option_label__HSXrJ";
+    label.style.cssText = "flex: 1; font-size: 14px; color: #fff;";
+    label.textContent = labelText;
+
+    const valueContainer = document.createElement("form");
+    valueContainer.className = "slider-option_value__OM__C";
+    valueContainer.style.cssText = "flex-shrink: 0; min-width: 40px; text-align: right;";
+
+    const valueLabel = document.createElement("div");
+    valueLabel.className = "slider-option_valueLabel__XS837";
+    valueLabel.style.cssText = "font-size: 14px; color: #fff;";
+    const displayVal = unit === "%" ? Math.round(GG.settings[settingKey] * 100) : (step < 1 ? GG.settings[settingKey].toFixed(1) : GG.settings[settingKey]);
+    valueLabel.textContent = `${displayVal}${unit}`;
+
+    valueContainer.appendChild(valueLabel);
+
+    const sliderWrapper = document.createElement("div");
+    sliderWrapper.className = "slider-option_slider__kJaCT";
+    sliderWrapper.style.cssText = "flex: 1; max-width: 150px;";
+
+    const slider = document.createElement("div");
+    slider.className = "styles_rangeslider__8vVg3 styles_variantPurple__1s1cU";
+    slider.style.cssText = "position: relative; width: 100%; height: 8px; background: rgba(255, 255, 255, 0.2); border-radius: 4px; cursor: pointer;";
+
+    const currentVal = unit === "%" ? GG.settings[settingKey] * 100 : GG.settings[settingKey];
+    const effectiveMin = unit === "%" ? min * 100 : min;
+    const effectiveMax = unit === "%" ? max * 100 : max;
+
+    const fill = document.createElement("div");
+    fill.className = "styles_fill__9MeZ9";
+    fill.style.cssText = `position: absolute; left: 0; top: 0; height: 100%; background: #8b5cf6; border-radius: 4px; width: ${((currentVal - effectiveMin) / (effectiveMax - effectiveMin)) * 100}%;`;
+
+    const handle = document.createElement("div");
+    handle.className = "styles_handle__h9ytQ";
+    handle.tabIndex = 0;
+    handle.style.cssText = `position: absolute; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; background: #fff; border-radius: 50%; border: 2px solid #8b5cf6; cursor: grab; left: ${((currentVal - effectiveMin) / (effectiveMax - effectiveMin)) * 100}%;`;
+    handle.innerHTML = "<div></div>";
+
+    slider.appendChild(fill);
+    slider.appendChild(handle);
+    sliderWrapper.appendChild(slider);
+
+    sliderContainer.appendChild(icon);
+    sliderContainer.appendChild(label);
+    sliderContainer.appendChild(valueContainer);
+    sliderContainer.appendChild(sliderWrapper);
+
+    let isDragging = false;
+    const updateFromEvent = (e) => {
+      const rect = slider.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      x = Math.max(0, Math.min(x, rect.width));
+      const percent = x / rect.width;
+      let newValue = effectiveMin + (effectiveMax - effectiveMin) * percent;
+      const effectiveStep = unit === "%" ? step * 100 : step;
+      const stepped = effectiveStep ? Math.round(newValue / effectiveStep) * effectiveStep : newValue;
+      const clamped = Math.max(effectiveMin, Math.min(stepped, effectiveMax));
+
+      fill.style.width = `${((clamped - effectiveMin) / (effectiveMax - effectiveMin)) * 100}%`;
+      handle.style.left = `${((clamped - effectiveMin) / (effectiveMax - effectiveMin)) * 100}%`;
+      
+      const displayValue = unit === "%" ? Math.round(clamped) : (step < 1 ? clamped.toFixed(1) : Math.round(clamped));
+      valueLabel.textContent = `${displayValue}${unit}`;
+
+      const settingsValue = unit === "%" ? clamped / 100 : clamped;
+      GG.settings[settingKey] = settingsValue;
+      
+      if (typeof iconFn === 'function') {
+        icon.innerHTML = iconFn(settingsValue);
+      }
+      
+      GG.saveSettings();
+      if (typeof GG.updateMarkerStyle === 'function') GG.updateMarkerStyle();
+      if (typeof GG.updateStreetviewMarkerStyle === 'function') GG.updateStreetviewMarkerStyle();
+      if (typeof GG.updateSafetyOutlineStyle === 'function') GG.updateSafetyOutlineStyle();
+    };
+
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      isDragging = true;
+      const onMouseMove = (e) => { if (isDragging) updateFromEvent(e); };
+      const onMouseUp = () => {
+        isDragging = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+
+    slider.addEventListener("click", (e) => { if (!isDragging) updateFromEvent(e); });
+
+    return sliderContainer;
+  };
+    
   const buildStreamerModeToggle = () => {
     if (GG.isElectron || GG.isSteam) return null;
     
@@ -1084,99 +1258,242 @@
       const sectionContent = document.createElement("div");
       sectionContent.className = "settings-section_content__LGzLT";
 
-      const hotkeyContainer = document.createElement("div");
-      hotkeyContainer.className = "slider-option_wrapper__3gsTQ";
-      hotkeyContainer.style.cssText = "margin-bottom: 16px;";
+      const gameModeContainer = document.createElement("div");
+      gameModeContainer.className = "slider-option_wrapper__3gsTQ";
+      gameModeContainer.style.cssText = "margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1);";
 
-      const hotkeyIcon = document.createElement("div");
-      hotkeyIcon.className = "slider-option_icon__qtnY8";
-      hotkeyIcon.style.cssText = "width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;";
-      hotkeyIcon.innerHTML = `
-      <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="6" width="16" height="15" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
-        <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
-      </svg>
-    `;
+      const gameModeLabel = document.createElement("div");
+      gameModeLabel.className = "slider-option_label__HSXrJ";
+      gameModeLabel.textContent = "Modes";
+      gameModeLabel.style.cssText = "margin-bottom: 12px; font-weight: 600; color: #fff;";
+      
+      const gameModeSelect = document.createElement("div");
+      gameModeSelect.className = "flex_flex__Rxtgm flex_direction__Fa3Gs flex_gap__sXfgm";
+      gameModeSelect.style.cssText = "display: flex; gap: 8px;";
 
-      const hotkeyLabel = document.createElement("div");
-      hotkeyLabel.className = "slider-option_label__HSXrJ";
-      hotkeyLabel.textContent = "Hotkey";
+      const modes = [
+        { id: "normal", label: "Normal", color: "#8b5cf6", desc: "Standard GhostGuessr experience" },
+        { id: "safety", label: "Safety", color: "#Green", desc: "No exact markers, only country outline" },
+        { id: "risky", label: "Risky", color: "#f43f5e", desc: "Coming Soon" }
+      ];
 
-      const hotkeyValueContainer = document.createElement("form");
-      hotkeyValueContainer.className = "slider-option_value__OM__C";
-
-      GG.hotkeyInput = document.createElement("input");
-      GG.hotkeyInput.type = "text";
-      GG.hotkeyInput.value = GG.settings.hotkey;
-      GG.hotkeyInput.maxLength = 1;
-      GG.hotkeyInput.style.cssText = `
-      width: 60px;
-      height: 32px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #8b5cf6;
-      border-radius: 6px;
-      color: #fff;
-      padding: 0 8px;
-      font-size: 14px;
-      text-align: center;
-      text-transform: uppercase;
-      outline: none;
-    `;
-
-      GG.hotkeyInput.addEventListener("focus", function () {
-        this.value = "";
-      });
-
-      GG.hotkeyInput.addEventListener("blur", function () {
-        if (this.value === "") {
-          this.value = GG.settings.hotkey;
-        }
-      });
-
-      GG.hotkeyInput.addEventListener("input", function () {
-        const key = this.value.toUpperCase();
-        if (key.length > 0 && /^[A-Z0-9]$/.test(key)) {
-          this.value = key;
-          GG.settings.hotkey = key;
-          GG.saveSettings();
-          GG.setupHotkeyListener();
-          GG.updateButtonState();
-
-          hotkeyIcon.innerHTML = `
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="4" y="6" width="16" height="12" rx="2" stroke="#8b5cf6" stroke-width="2" fill="none"/>
-            <text x="12" y="15" text-anchor="middle" font-family="Arial" font-size="10" fill="#8b5cf6">${key}</text>
-          </svg>
-        `;
-        }
-      });
-
-      hotkeyValueContainer.appendChild(GG.hotkeyInput);
-      hotkeyContainer.appendChild(hotkeyIcon);
-      hotkeyContainer.appendChild(hotkeyLabel);
-      hotkeyContainer.appendChild(hotkeyValueContainer);
-      sectionContent.appendChild(hotkeyContainer);
-
-      if (!GG.isElectron && !GG.isSteam) {
-        const autoClaimToggle = buildAutoClaimToggle(settingsContainer);
-        if (autoClaimToggle) {
-          sectionContent.appendChild(autoClaimToggle);
-        }
+      modes.forEach(mode => {
+        const btn = document.createElement("button");
+        const isActive = GG.settings.gameMode === mode.id;
         
-        const streamerModeToggle = buildStreamerModeToggle();
-        if (streamerModeToggle) {
-          sectionContent.appendChild(streamerModeToggle);
-        }
-      }
-
-      const scorePredictorToggle = createScorePredictorToggle();
-        if (scorePredictorToggle) {
-          sectionContent.appendChild(scorePredictorToggle);
-          const scorePredictorSettings = buildScorePredictorSettings();
-          if (scorePredictorSettings) {
-            sectionContent.appendChild(scorePredictorSettings);
+        btn.textContent = mode.label;
+        btn.style.cssText = `
+          flex: 1;
+          padding: 8px;
+          border-radius: 6px;
+          border: 1px solid ${isActive ? mode.color : 'rgba(255,255,255,0.2)'};
+          background: ${isActive ? mode.color + '40' : 'rgba(255,255,255,0.05)'};
+          color: ${isActive ? '#fff' : 'rgba(255,255,255,0.6)'};
+          cursor: pointer;
+          font-weight: 600;
+          transition: all 0.2s;
+        `;
+        
+        btn.onclick = () => {
+          GG.settings.gameMode = mode.id;
+          GG.saveSettings();
+          
+          const allBtns = gameModeSelect.children;
+          Array.from(allBtns).forEach((b, i) => {
+            const m = modes[i];
+            const active = m.id === mode.id;
+            b.style.borderColor = active ? m.color : 'rgba(255,255,255,0.2)';
+            b.style.background = active ? m.color + '40' : 'rgba(255,255,255,0.05)';
+            b.style.color = active ? '#fff' : 'rgba(255,255,255,0.6)';
+          });
+          
+          if (typeof GG.updateSettingsVisibility === 'function') {
+            GG.updateSettingsVisibility();
           }
+          if (typeof GG.toggleMarker === 'function') {
+             if (GG.settings.enabled) GG.placeMarker(); 
+             else GG.toggleMarker();
+          }
+        };
+
+        gameModeSelect.appendChild(btn);
+      });
+
+      gameModeContainer.appendChild(gameModeLabel);
+      gameModeContainer.appendChild(gameModeSelect);
+      sectionContent.appendChild(gameModeContainer);
+
+      const dynamicSettingsContainer = document.createElement("div");
+      dynamicSettingsContainer.id = "gg-dynamic-settings";
+      sectionContent.appendChild(dynamicSettingsContainer);
+
+      GG.updateSettingsVisibility = () => {
+        dynamicSettingsContainer.innerHTML = "";
+        const mode = GG.settings.gameMode;
+        
+        if (mode === "normal") {
+           // Normal mode specific (currently none, as marker settings are shared but handled by logic)
+           // If we had specific text or extra options for normal, they'd go here.
+        } 
+        
+        if (mode === "risky") {
+             const infoBox = document.createElement("div");
+            infoBox.style.cssText = "background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;";
+            infoBox.innerHTML = `
+                <div style="display: flex; gap: 8px; align-items: start;">
+                    <div style="color: #f43f5e;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; color: #f43f5e; margin-bottom: 4px;">Risky Mode</div>
+                        <div style="font-size: 13px; color: #d1d5db; line-height: 1.4;">
+                            Features coming soon.
+                        </div>
+                    </div>
+                </div>
+            `;
+            dynamicSettingsContainer.appendChild(infoBox);
         }
+
+        const hotkeyContainer = document.createElement("div");
+        hotkeyContainer.className = "slider-option_wrapper__3gsTQ";
+        hotkeyContainer.style.cssText = "margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 15px;";
+
+        const hotkeyIcon = document.createElement("div");
+        hotkeyIcon.className = "slider-option_icon__qtnY8";
+        hotkeyIcon.style.cssText = "width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;";
+        hotkeyIcon.innerHTML = `
+        <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="6" width="16" height="15" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
+            <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
+        </svg>
+        `;
+
+        const hotkeyLabel = document.createElement("div");
+        hotkeyLabel.className = "slider-option_label__HSXrJ";
+        hotkeyLabel.textContent = "Hotkey";
+
+        const hotkeyValueContainer = document.createElement("form");
+        hotkeyValueContainer.className = "slider-option_value__OM__C";
+
+        GG.hotkeyInput = document.createElement("input");
+        GG.hotkeyInput.type = "text";
+        GG.hotkeyInput.value = GG.settings.hotkey;
+        GG.hotkeyInput.maxLength = 1;
+        GG.hotkeyInput.style.cssText = `
+        width: 60px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #8b5cf6;
+        border-radius: 6px;
+        color: #fff;
+        padding: 0 8px;
+        font-size: 14px;
+        text-align: center;
+        text-transform: uppercase;
+        outline: none;
+        `;
+
+        GG.hotkeyInput.addEventListener("focus", function () {
+            this.value = "";
+        });
+        GG.hotkeyInput.addEventListener("blur", function () {
+            if (this.value === "") {
+            this.value = GG.settings.hotkey;
+            }
+        });
+
+        GG.hotkeyInput.addEventListener("input", function () {
+            const key = this.value.toUpperCase();
+            if (key.length > 0 && /^[A-Z0-9]$/.test(key)) {
+            this.value = key;
+            GG.settings.hotkey = key;
+            GG.saveSettings();
+            GG.setupHotkeyListener();
+            GG.updateButtonState();
+
+            hotkeyIcon.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="16" height="12" rx="2" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+                <text x="12" y="15" text-anchor="middle" font-family="Arial" font-size="10" fill="#8b5cf6">${key}</text>
+            </svg>
+            `;
+            }
+        });
+
+        hotkeyValueContainer.appendChild(GG.hotkeyInput);
+        hotkeyContainer.appendChild(hotkeyIcon);
+        hotkeyContainer.appendChild(hotkeyLabel);
+        hotkeyContainer.appendChild(hotkeyValueContainer);
+        dynamicSettingsContainer.appendChild(hotkeyContainer);
+
+        if (!GG.isElectron && !GG.isSteam) {
+            const autoClaimToggle = buildAutoClaimToggle(settingsContainer);
+            if (autoClaimToggle) {
+            dynamicSettingsContainer.appendChild(autoClaimToggle);
+            }
+            
+            const streamerModeToggle = buildStreamerModeToggle();
+            if (streamerModeToggle) {
+            dynamicSettingsContainer.appendChild(streamerModeToggle);
+            }
+        }
+
+        if (mode !== "safety") {
+            const scorePredictorToggle = createScorePredictorToggle();
+            if (scorePredictorToggle) {
+                dynamicSettingsContainer.appendChild(scorePredictorToggle);
+                const scorePredictorSettings = buildScorePredictorSettings();
+                if (scorePredictorSettings) {
+                dynamicSettingsContainer.appendChild(scorePredictorSettings);
+                }
+            }
+        } else {
+            const infoBox = document.createElement("div");
+            infoBox.style.cssText = "background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px; margin-top: 16px;";
+            infoBox.innerHTML = `
+                <div style="display: flex; gap: 8px; align-items: start;">
+                    <div style="color: #10b981;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; color: #10b981; margin-bottom: 4px;">Safety Mode Active</div>
+                        <div style="font-size: 13px; color: #d1d5db; line-height: 1.4;">
+                            Markers disabled. Country outline enabled.
+                        </div>
+                    </div>
+                </div>
+            `;
+            dynamicSettingsContainer.appendChild(infoBox);
+
+            const safetySettings = document.createElement("div");
+            safetySettings.style.cssText = "margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); paddingTop: 10px;";
+            
+            const colorContainer = GG.createColorPicker("Outline Color", "safetyOutlineColor", "safetyOutlineColor", "safetyOutlineColor");
+            const colorWrapper = document.createElement("div");
+            colorWrapper.style.cssText = "display: flex; margin-bottom: 16px;";
+            colorWrapper.appendChild(colorContainer);
+            safetySettings.appendChild(colorWrapper);
+
+            safetySettings.appendChild(GG.createSlider("Outline Width", "safetyOutlineWidth", 0.5, 5, 0.1, "px", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="${GG.settings.safetyOutlineColor}" stroke-width="${val}"/>
+                </svg>
+            `));
+
+            safetySettings.appendChild(GG.createSlider("Fill Opacity", "safetyOutlineOpacity", 0, 1, 0.01, "%", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="${GG.settings.safetyOutlineColor}" fill-opacity="${val}" stroke="${GG.settings.safetyOutlineColor}" stroke-width="2"/>
+                </svg>
+            `));
+            
+            dynamicSettingsContainer.appendChild(safetySettings);
+        }
+      };
+
+      if (typeof GG.updateSettingsVisibility === 'function') {
+        GG.updateSettingsVisibility();
+      }
 
       settingsSection.appendChild(sectionHeader);
       settingsSection.appendChild(sectionContent);
@@ -1240,32 +1557,159 @@
 
     ghostSettingsContainer.appendChild(headerContainer);
 
-    const hotkeyContainer = document.createElement("div");
-    hotkeyContainer.className =
-      "game-menu_volumeContainer__aWb0Y ghostguessr-setting";
+    const gameModeContainer = document.createElement("div");
+    gameModeContainer.className = "game-menu_volumeContainer__aWb0Y ghostguessr-setting";
+    gameModeContainer.style.cssText = "margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;";
 
-    const hotkeyLabel = document.createElement("p");
-    hotkeyLabel.className = "game-menu_subHeader__Ul5Vl";
-    hotkeyLabel.textContent = "Hotkey";
-    hotkeyContainer.appendChild(hotkeyLabel);
+    const gameModeLabel = document.createElement("p");
+    gameModeLabel.className = "game-menu_subHeader__Ul5Vl";
+    gameModeLabel.textContent = "Modes";
+    gameModeContainer.appendChild(gameModeLabel);
 
-    const hotkeyInputContainer = document.createElement("div");
-    hotkeyInputContainer.className = "game-menu_sliderContainer__suHjk";
-    hotkeyInputContainer.style.cssText =
-      "display: flex; align-items: center; gap: 10px;";
+    const gameModeSelect = document.createElement("div");
+    gameModeSelect.style.cssText = "display: flex; gap: 8px; margin-top: 10px;";
 
-    const hotkeyIcon = document.createElement("div");
-    hotkeyIcon.className = "game-menu_icon__qC_vb";
-    hotkeyIcon.innerHTML = `
+    const modes = [
+        { id: "normal", label: "Normal", color: "#8b5cf6" },
+        { id: "safety", label: "Safety", color: "#10b981" },
+        { id: "risky", label: "Risky", color: "#f43f5e" }
+    ];
+
+    modes.forEach(mode => {
+        const btn = document.createElement("button");
+        const isActive = GG.settings.gameMode === mode.id;
+        
+        btn.textContent = mode.label;
+        btn.style.cssText = `
+          flex: 1;
+          padding: 8px;
+          border-radius: 6px;
+          border: 1px solid ${isActive ? mode.color : 'rgba(255,255,255,0.2)'};
+          background: ${isActive ? mode.color + '40' : 'rgba(255,255,255,0.05)'};
+          color: ${isActive ? '#fff' : 'rgba(255,255,255,0.6)'};
+          cursor: pointer;
+          font-weight: 600;
+          transition: all 0.2s;
+        `;
+        
+        btn.onclick = () => {
+          GG.settings.gameMode = mode.id;
+
+          if (mode.id === "safety") {
+              if (typeof GG.toggleScorePredictor === 'function' && GG.settings.showScorePredictor) {
+                 if (document.getElementById('gg-score-predictor')) {
+                     document.getElementById('gg-score-predictor').style.display = 'none';
+                 }
+              }
+              if (GG.connectionLine) {
+                 GG.connectionLine.setMap(null);
+              }
+          }
+
+          GG.saveSettings();
+          
+          Array.from(gameModeSelect.children).forEach((b, i) => {
+            const m = modes[i];
+            const active = m.id === mode.id;
+            b.style.borderColor = active ? m.color : 'rgba(255,255,255,0.2)';
+            b.style.background = active ? m.color + '40' : 'rgba(255,255,255,0.05)';
+            b.style.color = active ? '#fff' : 'rgba(255,255,255,0.6)';
+          });
+          
+          if (typeof GG.updateSettingsVisibilityLegacy === 'function') {
+            GG.updateSettingsVisibilityLegacy();
+          }
+          if (typeof GG.updateSettingsVisibility === 'function') {
+            GG.updateSettingsVisibility();
+          }
+          
+          if (typeof GG.toggleMarker === 'function') {
+             if (GG.settings.enabled) GG.placeMarker(); 
+             else GG.toggleMarker();
+          }
+        };
+        gameModeSelect.appendChild(btn);
+    });
+
+    gameModeContainer.appendChild(gameModeSelect);
+    ghostSettingsContainer.appendChild(gameModeContainer);
+
+    const dynamicSettingsContainer = document.createElement("div");
+    dynamicSettingsContainer.className = "ghostguessr-setting";
+    dynamicSettingsContainer.style.width = "100%";
+    ghostSettingsContainer.appendChild(dynamicSettingsContainer);
+
+    GG.updateSettingsVisibilityLegacy = () => {
+        dynamicSettingsContainer.innerHTML = "";
+        const mode = GG.settings.gameMode;
+
+        if (mode === "safety") {
+            const infoBox = document.createElement("div");
+            infoBox.style.cssText = "background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;";
+            infoBox.innerHTML = `
+                <div style="font-weight: 700; color: #10b981; margin-bottom: 4px;">Safety Mode Active</div>
+                <div style="font-size: 13px; color: #d1d5db; line-height: 1.4;">Markers disabled. Country outline only.</div>
+            `;
+            dynamicSettingsContainer.appendChild(infoBox);
+
+            const safetySettings = document.createElement("div");
+            safetySettings.style.cssText = "margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); paddingTop: 10px;";
+            
+            const colorContainer = GG.createColorPicker("Outline Color", "safetyOutlineColor", "safetyOutlineColor", "safetyOutlineColor");
+            const colorWrapper = document.createElement("div");
+            colorWrapper.style.cssText = "display: flex; margin-bottom: 16px;";
+            colorWrapper.appendChild(colorContainer);
+            safetySettings.appendChild(colorWrapper);
+
+            safetySettings.appendChild(GG.createSlider("Outline Width", "safetyOutlineWidth", 0.5, 5, 0.1, "px", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="${GG.settings.safetyOutlineColor}" stroke-width="${val}"/>
+                </svg>
+            `));
+
+            safetySettings.appendChild(GG.createSlider("Fill Opacity", "safetyOutlineOpacity", 0, 1, 0.01, "%", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="${GG.settings.safetyOutlineColor}" fill-opacity="${val}" stroke="${GG.settings.safetyOutlineColor}" stroke-width="2"/>
+                </svg>
+            `));
+            
+            dynamicSettingsContainer.appendChild(safetySettings);
+        }
+        else if (mode === "risky") {
+            const infoBox = document.createElement("div");
+            infoBox.style.cssText = "background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;";
+            infoBox.innerHTML = `
+                <div style="font-weight: 700; color: #f43f5e; margin-bottom: 4px;">Risky Mode</div>
+                <div style="font-size: 13px; color: #d1d5db; line-height: 1.4;">Coming soon.</div>
+            `;
+            dynamicSettingsContainer.appendChild(infoBox);
+        }
+
+        const hotkeyContainer = document.createElement("div");
+        hotkeyContainer.className = "game-menu_volumeContainer__aWb0Y";
+        hotkeyContainer.style.cssText = "margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 15px;";
+        
+        const hotkeyLabel = document.createElement("p");
+        hotkeyLabel.className = "game-menu_subHeader__Ul5Vl";
+        hotkeyLabel.textContent = "Hotkey";
+        hotkeyContainer.appendChild(hotkeyLabel);
+
+        const hotkeyInputContainer = document.createElement("div");
+        hotkeyInputContainer.className = "game-menu_sliderContainer__suHjk";
+        hotkeyInputContainer.style.cssText = "display: flex; align-items: center; gap: 10px;";
+
+        const hotkeyIcon = document.createElement("div");
+        hotkeyIcon.className = "game-menu_icon__qC_vb";
+        hotkeyIcon.innerHTML = `
             <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="4" y="6" width="16" height="17" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
                 <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
             </svg>
         `;
 
-    GG.hotkeyInput = document.createElement("button");
-    GG.hotkeyInput.textContent = GG.settings.hotkey;
-    GG.hotkeyInput.style.cssText = `
+        GG.hotkeyInput = document.createElement("button");
+        GG.hotkeyInput.textContent = GG.settings.hotkey;
+        GG.hotkeyInput.style.cssText = `
             flex: 1;
             height: 36px;
             background: rgba(255, 255, 255, 0.1);
@@ -1279,105 +1723,81 @@
             transition: all 0.2s;
         `;
 
-    let isRecording = false;
+        let isRecording = false;
+        const endRecording = (saved) => {
+            isRecording = false;
+            document.removeEventListener('keydown', recordKey);
+            document.removeEventListener('mousedown', checkClickOutside);
+            
+            GG.hotkeyInput.textContent = GG.settings.hotkey;
+            GG.hotkeyInput.style.background = 'rgba(255, 255, 255, 0.1)';
+            GG.hotkeyInput.style.borderColor = '#8b5cf6';
+            
+            if (saved) {
+                    hotkeyIcon.innerHTML = `
+                    <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="6" width="16" height="17" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
+                    <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
+                </svg>`;
+            }
+        };
 
-    const endRecording = (saved) => {
-        isRecording = false;
-        document.removeEventListener('keydown', recordKey);
-        document.removeEventListener('mousedown', checkClickOutside);
-        
-        GG.hotkeyInput.textContent = GG.settings.hotkey;
-        GG.hotkeyInput.style.background = 'rgba(255, 255, 255, 0.1)';
-        GG.hotkeyInput.style.borderColor = '#8b5cf6';
-        
-        if (saved) {
-             hotkeyIcon.innerHTML = `
-             <svg width="35" height="35" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="16" height="17" rx="2" stroke="#ffffff" stroke-width="2" fill="none"/>
-                <text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#ffffff">${GG.settings.hotkey}</text>
-            </svg>`;
+        const recordKey = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === 'Escape') { endRecording(false); return; }
+            const key = e.key.toUpperCase();
+            if (key.length === 1 && /[A-Z0-9 ]/.test(key) || key === 'SPACE') {
+                    const finalKey = key === ' ' ? 'SPACE' : key;
+                    GG.settings.hotkey = finalKey;
+                    GG.saveSettings();
+                    GG.setupHotkeyListener();
+                    GG.updateButtonState();
+                    endRecording(true);
+            }
+        };
+
+        const checkClickOutside = (e) => { if (e.target !== GG.hotkeyInput) endRecording(false); };
+
+        GG.hotkeyInput.onclick = () => {
+            if (isRecording) { endRecording(false); return; }
+            isRecording = true;
+            GG.hotkeyInput.textContent = "Press any key...";
+            GG.hotkeyInput.style.background = 'rgba(139, 92, 246, 0.3)';
+            GG.hotkeyInput.style.borderColor = '#fff';
+            document.addEventListener('keydown', recordKey);
+            setTimeout(() => document.addEventListener('mousedown', checkClickOutside), 100);
+        };
+
+        const hotkeyHelp = document.createElement("span");
+        hotkeyHelp.textContent = "Press any key";
+        hotkeyHelp.style.cssText = "font-size: 12px; color: #888; font-style: italic; min-width: 100px;";
+
+        hotkeyInputContainer.appendChild(hotkeyIcon);
+        hotkeyInputContainer.appendChild(GG.hotkeyInput);
+        hotkeyInputContainer.appendChild(hotkeyHelp);
+        hotkeyContainer.appendChild(hotkeyInputContainer);
+        dynamicSettingsContainer.appendChild(hotkeyContainer);
+
+        if (!GG.isElectron && !GG.isSteam) {
+            const autoClaimToggle = buildAutoClaimToggle(settingsContainer);
+            if (autoClaimToggle) dynamicSettingsContainer.appendChild(autoClaimToggle);
+            
+            const streamerModeToggle = buildStreamerModeToggle();
+            if (streamerModeToggle) dynamicSettingsContainer.appendChild(streamerModeToggle);
+        }
+
+        if (mode !== "safety") {
+            const scorePredictorToggle = createScorePredictorToggle();
+            if (scorePredictorToggle) {
+                dynamicSettingsContainer.appendChild(scorePredictorToggle);
+                const scorePredictorSettings = buildScorePredictorSettings();
+                if (scorePredictorSettings) dynamicSettingsContainer.appendChild(scorePredictorSettings);
+            }
         }
     };
 
-    const recordKey = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (e.key === 'Escape') {
-            endRecording(false);
-            return;
-        }
-
-        const key = e.key.toUpperCase();
-        // Allow A-Z, 0-9, Space
-        if (key.length === 1 && /[A-Z0-9 ]/.test(key) || key === 'SPACE') {
-             const finalKey = key === ' ' ? 'SPACE' : key;
-             GG.settings.hotkey = finalKey;
-             GG.saveSettings();
-             GG.setupHotkeyListener();
-             GG.updateButtonState();
-             endRecording(true);
-        }
-    };
-
-    const checkClickOutside = (e) => {
-        if (e.target !== GG.hotkeyInput) {
-            endRecording(false);
-        }
-    };
-
-    GG.hotkeyInput.onclick = () => {
-        if (isRecording) {
-            endRecording(false);
-            return;
-        }
-        
-        isRecording = true;
-        GG.hotkeyInput.textContent = "Press any key...";
-        GG.hotkeyInput.style.background = 'rgba(139, 92, 246, 0.3)';
-        GG.hotkeyInput.style.borderColor = '#fff';
-        
-        document.addEventListener('keydown', recordKey);
-        setTimeout(() => {
-             document.addEventListener('mousedown', checkClickOutside);
-        }, 100);
-    };
-
-    const hotkeyHelp = document.createElement("span");
-    hotkeyHelp.textContent = "Press any key";
-    hotkeyHelp.style.cssText =
-      "font-size: 12px; color: #888; font-style: italic; min-width: 100px;";
-
-    hotkeyInputContainer.appendChild(hotkeyIcon);
-    hotkeyInputContainer.appendChild(GG.hotkeyInput);
-    hotkeyInputContainer.appendChild(hotkeyHelp);
-    hotkeyContainer.appendChild(hotkeyInputContainer);
-    ghostSettingsContainer.appendChild(hotkeyContainer);
-
-    if (!GG.isElectron && !GG.isSteam) {
-      const autoClaimToggle = buildAutoClaimToggle(settingsContainer);
-      if (autoClaimToggle) {
-        autoClaimToggle.classList.add("ghostguessr-setting");
-        ghostSettingsContainer.appendChild(autoClaimToggle);
-      }
-      
-      const streamerModeToggle = buildStreamerModeToggle();
-      if (streamerModeToggle) {
-        streamerModeToggle.classList.add("ghostguessr-setting");
-        ghostSettingsContainer.appendChild(streamerModeToggle);
-      }
-      
-      const scorePredictorToggle = createScorePredictorToggle();
-      if (scorePredictorToggle) {
-        scorePredictorToggle.classList.add("ghostguessr-setting");
-        ghostSettingsContainer.appendChild(scorePredictorToggle);
-        const scorePredictorSettings = buildScorePredictorSettings();
-        if (scorePredictorSettings) {
-          scorePredictorSettings.classList.add("ghostguessr-setting");
-          ghostSettingsContainer.appendChild(scorePredictorSettings);
-        }
-      }
-    }
+    GG.updateSettingsVisibilityLegacy();
 
     if (!useExistingDivider) {
       const dividerBottom = document.createElement("div");

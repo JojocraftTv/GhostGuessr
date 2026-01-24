@@ -21,13 +21,14 @@
     
     if (url.includes('/api/v4/geo-coding/terrain')) {
         try {
-            const options = args[1];
-            if (options && options.body) {
-                const body = JSON.parse(options.body);
-                if (body && typeof body.lat === 'number' && typeof body.lng === 'number') {
-                    updateScorePredictor(body.lat, body.lng, true);
-                }
-            }
+          console.log('[GG Score Predictor] Intercepted terrain fetch:', url);
+          const options = args[1];
+          if (options && options.body && GG.settings.gameMode !== "safety") {
+              const body = JSON.parse(options.body);
+              if (body && typeof body.lat === 'number' && typeof body.lng === 'number') {
+                  updateScorePredictor(body.lat, body.lng, true);
+              }
+          }
         } catch (e) {
              console.warn('[GG Score Predictor] Error intercepting terrain fetch:', e);
         }
@@ -267,6 +268,12 @@
       
       if (guessMarkers.length === 0) {
         return;
+      }
+
+      // Safety Mode Check - Disable Predictor
+      if (GG.settings.gameMode === "safety") {
+          hideScorePredictor();
+          return;
       }
 
       if (!GG.settings.showScorePredictor && !GG.settings.showConnectionLine) {
