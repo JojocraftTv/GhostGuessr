@@ -432,62 +432,130 @@
       return null;
   }
 
+  GG.clearSafetyEffects = function() {
+      if (GG.safetyOutline) {
+          GG.safetyOutline.setMap(null);
+          GG.safetyOutline = null;
+      }
+      if (GG.safetyDataLayer) {
+          GG.safetyDataLayer.setMap(null);
+          GG.safetyDataLayer = null;
+      }
+  };
+
   GG.showSafetyModeCountryOutline = function() {
       if (!GG.initialCoords.lat || !GG.initialCoords.lng) return;
+
+      const modeRegion = GG.settings.safetyModeRegion || 'country';
+      const coordKey = `${GG.initialCoords.lat},${GG.initialCoords.lng}-${modeRegion}-${GG.settings.safetyDetailed}`;
+      
+      if (GG.currentOutlineParams === coordKey && GG.isOutlineLoading) {
+          return;
+      }
+      
+      if (GG.lastAppliedOutlineParams === coordKey) {
+          const isSafetyLayerValid = GG.safetyDataLayer && GG.safetyDataLayer.getMap();
+          const isSafetyOutlineValid = GG.safetyOutline && GG.safetyOutline.getMap();
+          
+          if (isSafetyLayerValid || isSafetyOutlineValid) {
+               return; 
+          }
+      }
+
       GG.gmap = GG.getGoogleMap();
       if (!GG.gmap || !google.maps.Geocoder) return;
 
+      const requestId = Date.now();
+      GG.currentOutlineRequestId = requestId;
+      GG.currentOutlineParams = coordKey;
+      GG.isOutlineLoading = true;
+
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ location: GG.initialCoords }, async (results, status) => {
-          if (status === "OK" && results && results.length > 0) {
-              const country = results.find(r => r.types.includes("country"));
-              
-              if (country) {
-                  if (GG.safetyOutline) { GG.safetyOutline.setMap(null); GG.safetyOutline = null; }
-                  if (GG.safetyDataLayer) { GG.safetyDataLayer.setMap(null); GG.safetyDataLayer = null; }
+          if (GG.currentOutlineRequestId !== requestId) return;
 
-                  let polySuccess = false;
-                  const shortName = country.address_components?.find(c => c.types.includes("country"))?.short_name;
-                  if (shortName) {
-                      const cca3 = await getCountryCode3(shortName);
-                      if (cca3) {
-                          const geojson = await fetchCountryGeoJSON(cca3);
-                          
-                          if (!GG.settings.enabled || GG.settings.gameMode !== 'safety') return;
+          try {
+              if (status === "OK" && results && results.length > 0) {
+                  
+                  let targetResult = null;
 
-                          if (geojson) {
-                              if (GG.safetyDataLayer) { GG.safetyDataLayer.setMap(null); GG.safetyDataLayer = null; }
+                  if (modeRegion === 'state') {
+                      targetResult = results.find(r => r.types.includes("administrative_area_level_1"));
+                      if (!targetResult) {
+                          targetResult = results.find(r => r.types.includes("country"));
+                      }
+                  } else {
+                      targetResult = results.find(r => r.types.includes("country"));
+                  }
+
+                  if (targetResult) {
+                      if (GG.currentOutlineRequestId !== requestId) return;
+                      
+                      GG.clearSafetyEffects();
+
+                      let polySuccess = false;
+                      const useDetailed = GG.settings.safetyDetailed !== false;
+
+                      if (useDetailed && targetResult.types.includes("country")) {
+                          const shortName = targetResult.address_components?.find(c => c.types.includes("country"))?.short_name;
+                          if (shortName) {
+                              const cca3 = await getCountryCode3(shortName);
+                              if (GG.currentOutlineRequestId !== requestId) return;
                               
-                              GG.safetyDataLayer = new google.maps.Data({ map: GG.gmap });
-                              GG.safetyDataLayer.addGeoJson(geojson);
-                              GG.safetyDataLayer.setStyle({
-                                  fillColor: GG.settings.safetyOutlineColor || "#10b981",
-                                  fillOpacity: (GG.settings.safetyOutlineOpacity || 0.8) * 0.2,
-                                  strokeColor: GG.settings.safetyOutlineColor || "#10b981",
-                                  strokeWeight: GG.settings.safetyOutlineWidth || 2,
-                                  strokeOpacity: GG.settings.safetyOutlineOpacity || 0.8,
-                                  clickable: false
-                              });
-                              polySuccess = true;
+                              if (cca3) {
+                                  const geojson = await fetchCountryGeoJSON(cca3);
+                                  if (GG.currentOutlineRequestId !== requestId) return;
+                                  
+                                  if (!GG.settings.enabled || GG.settings.gameMode !== 'safety') return;
+
+                                  if (geojson) {
+                                      console.log('[GG] Applying GeoJSON');
+                                      GG.safetyDataLayer = new google.maps.Data({ map: GG.gmap });
+                                      GG.safetyDataLayer.addGeoJson(geojson);
+                                      GG.safetyDataLayer.setStyle({
+                                          fillColor: GG.settings.safetyOutlineColor || "#10b981",
+                                          fillOpacity: (GG.settings.safetyOutlineOpacity || 0.8) * 0.2,
+                                          strokeColor: GG.settings.safetyOutlineColor || "#10b981",
+                                          strokeWeight: GG.settings.safetyOutlineWidth || 2,
+                                          strokeOpacity: GG.settings.safetyOutlineOpacity || 0.8,
+                                          clickable: false
+                                      });
+                                      polySuccess = true;
+                                      GG.lastAppliedOutlineParams = coordKey;
+                                  }
+                              }
                           }
                       }
-                  }
 
-                  if (!polySuccess && country.geometry && country.geometry.bounds) {
-                      if (!GG.settings.enabled || GG.settings.gameMode !== 'safety') return;
-                      if (GG.safetyOutline) { GG.safetyOutline.setMap(null); GG.safetyOutline = null; }
+                      if (!polySuccess && targetResult.geometry && targetResult.geometry.bounds) {
+                          if (!GG.settings.enabled || GG.settings.gameMode !== 'safety') return;
+                          
+                          console.log('[GG] Applying Bounds');
+                          if (GG.safetyOutline) { GG.safetyOutline.setMap(null); GG.safetyOutline = null; }
 
-                      GG.safetyOutline = new google.maps.Rectangle({
-                          strokeColor: GG.settings.safetyOutlineColor || "#10b981",
-                          strokeOpacity: GG.settings.safetyOutlineOpacity || 0.8,
-                          strokeWeight: GG.settings.safetyOutlineWidth || 2,
-                          fillColor: GG.settings.safetyOutlineColor || "#10b981",
-                          fillOpacity: (GG.settings.safetyOutlineOpacity || 0.8) * 0.2,
-                          map: GG.gmap,
-                          bounds: country.geometry.bounds,
-                          clickable: false
-                      });
+                          GG.safetyOutline = new google.maps.Rectangle({
+                              strokeColor: GG.settings.safetyOutlineColor || "#10b981",
+                              strokeOpacity: GG.settings.safetyOutlineOpacity || 0.8,
+                              strokeWeight: GG.settings.safetyOutlineWidth || 2,
+                              fillColor: GG.settings.safetyOutlineColor || "#10b981",
+                              fillOpacity: (GG.settings.safetyOutlineOpacity || 0.8) * 0.2,
+                              map: GG.gmap,
+                              bounds: targetResult.geometry.bounds,
+                              clickable: false
+                          });
+                          GG.lastAppliedOutlineParams = coordKey;
+                      }
+                  } else {
+                      console.log('[GG] No target result found');
                   }
+              } else {
+                  console.log('[GG] Geocode failed:', status);
+              }
+          } catch (e) {
+              console.error('[GG] Outline Error:', e);
+          } finally {
+              if (GG.currentOutlineRequestId === requestId) {
+                  GG.isOutlineLoading = false;
               }
           }
       });
@@ -533,7 +601,21 @@
 
     GG.placeMarker();
 
-    if (!GG.marker && GG.settings.gameMode !== 'safety') {
+    const mapReady = !!GG.getGoogleMap();
+    let shouldRetry = !mapReady;
+
+    if (mapReady) {
+        let isMissing = false;
+        if (GG.settings.gameMode === 'safety') {
+            if (!GG.safetyDataLayer && !GG.safetyOutline) isMissing = true;
+        } else {
+            if (!GG.marker) isMissing = true;
+        }
+
+        if (isMissing) shouldRetry = true;
+    }
+
+    if (shouldRetry) {
       const nextAttempt = (attempt || 0) + 1;
       if (nextAttempt <= 30) {
         if (GG.markerRetryId) {
@@ -557,19 +639,21 @@
 
     if (GG.settings.enabled) {
       GG.placeMarker();
+      if (GG.settings.gameMode !== 'safety') {
+          if (GG.connectionLine) GG.connectionLine.setMap(GG.gmap);
+          if (GG.streetviewMarker && GG.settings.showStreetviewMarker) GG.streetviewMarker.setMap(GG.gmap);
+      }
     } else {
       if (GG.marker && GG.marker.setMap) GG.marker.setMap(null);
       if (GG.streetviewMarker && GG.streetviewMarker.setMap) GG.streetviewMarker.setMap(null);
       if (GG.connectionLine && GG.connectionLine.setMap) GG.connectionLine.setMap(null);
-      if (GG.safetyOutline && GG.safetyOutline.setMap) GG.safetyOutline.setMap(null);
-      if (GG.safetyDataLayer && GG.safetyDataLayer.setMap) GG.safetyDataLayer.setMap(null);
+      
+      GG.clearSafetyEffects();
+
       let divMarker = document.getElementById("geo-div-marker");
       if (divMarker) divMarker.style.display = "none";
+      
       GG.marker = null;
-      GG.streetviewMarker = null;
-      GG.connectionLine = null;
-      GG.safetyOutline = null;
-      GG.safetyDataLayer = null;
     }
   };
 })();

@@ -95,6 +95,14 @@
        GG.connectionLine = null;
     }
     
+    if (typeof GG.clearSafetyEffects === 'function') {
+        GG.clearSafetyEffects();
+    } else {
+        if (GG.safetyOutline) { GG.safetyOutline.setMap(null); GG.safetyOutline = null; }
+        if (GG.safetyDataLayer) { GG.safetyDataLayer.setMap(null); GG.safetyDataLayer = null; }
+    }
+    GG.lastAppliedOutlineParams = null;
+
     const divMarker = document.getElementById("geo-div-marker");
     if (divMarker) divMarker.remove();
     GG.divMarkerActive = false;

@@ -1296,6 +1296,23 @@
         
         btn.onclick = () => {
           GG.settings.gameMode = mode.id;
+          
+          if (mode.id === 'safety') {
+             GG.settings.showStreetviewMarker = false;
+             GG.settings.showConnectionLine = false;
+             if (GG.connectionLine) {
+                 GG.connectionLine.setMap(null);
+             }
+          } else {
+             if (typeof GG.clearSafetyEffects === 'function') GG.clearSafetyEffects();
+
+             GG.settings.showStreetviewMarker = true;
+             GG.settings.showConnectionLine = true;
+             
+             if (GG.connectionLine) GG.connectionLine.setMap(GG.gmap);
+             if (GG.streetviewMarker) GG.streetviewMarker.setMap(GG.gmap);
+          }
+
           GG.saveSettings();
           
           const allBtns = gameModeSelect.children;
@@ -1466,6 +1483,80 @@
             `;
             dynamicSettingsContainer.appendChild(infoBox);
 
+            const targetSelect = document.createElement("div");
+            targetSelect.className = "ghostguessr-setting";
+            targetSelect.style.cssText = "margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;";
+            
+            const targetLabel = document.createElement("span");
+            targetLabel.textContent = "Target Region:";
+            targetLabel.style.cssText = "font-size: 13px; font-weight: 600; color: #e5e7eb;";
+            targetSelect.appendChild(targetLabel);
+
+            const toggleWrapper = document.createElement("div");
+            toggleWrapper.style.cssText = "display: flex; gap: 4px; background: rgba(0,0,0,0.2); padding: 2px; border-radius: 4px;";
+            
+            const rOptions = [
+                { id: 'country', label: 'Country' },
+                { id: 'state', label: 'State' }
+            ];
+
+            const currentRegion = GG.settings.safetyModeRegion || 'country';
+
+            rOptions.forEach(opt => {
+                const rBtn = document.createElement("button");
+                const isAct = currentRegion === opt.id;
+                rBtn.textContent = opt.label;
+                rBtn.style.cssText = `
+                    padding: 4px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    border: none;
+                    cursor: pointer;
+                    background: ${isAct ? '#10b981' : 'transparent'};
+                    color: ${isAct ? '#fff' : '#9ca3af'};
+                    transition: all 0.2s;
+                `;
+                rBtn.onclick = () => {
+                    GG.settings.safetyModeRegion = opt.id;
+                    GG.saveSettings();
+                    if (typeof GG.updateSettingsVisibility === 'function') GG.updateSettingsVisibility();
+                    if (GG.settings.enabled) GG.placeMarker();
+                };
+                toggleWrapper.appendChild(rBtn);
+            });
+            targetSelect.appendChild(toggleWrapper);
+            dynamicSettingsContainer.appendChild(targetSelect);
+
+            const detailToggle = document.createElement("div");
+            detailToggle.className = "game-options_option__eCz9o ghostguessr-setting";
+            detailToggle.style.cssText = "margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;";
+            
+            const detailLabel = document.createElement("div");
+            detailLabel.style.cssText = "display: flex; align-items: center; gap: 8px;";
+            detailLabel.innerHTML = `
+                <span style="font-weight: 600; font-size: 14px; color: #fff;">Detailed Outline</span>
+            `;
+            
+            const detailInputWrap = document.createElement("div");
+            detailInputWrap.className = "game-options_optionInput__paPBZ";
+            
+            const detailCheckbox = document.createElement("input");
+            detailCheckbox.type = "checkbox";
+            detailCheckbox.className = "toggle_toggle__qfXpL";
+            detailCheckbox.checked = GG.settings.safetyDetailed !== false;
+            
+            detailCheckbox.addEventListener("change", function () {
+                GG.settings.safetyDetailed = detailCheckbox.checked;
+                GG.saveSettings();
+                if (GG.settings.enabled) GG.placeMarker();
+            });
+            
+            detailInputWrap.appendChild(detailCheckbox);
+            detailToggle.appendChild(detailLabel);
+            detailToggle.appendChild(detailInputWrap);
+            dynamicSettingsContainer.appendChild(detailToggle);
+
             const safetySettings = document.createElement("div");
             safetySettings.style.cssText = "margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); paddingTop: 10px;";
             
@@ -1596,6 +1687,9 @@
           GG.settings.gameMode = mode.id;
 
           if (mode.id === "safety") {
+              GG.settings.showStreetviewMarker = false;
+              GG.settings.showConnectionLine = false;
+
               if (typeof GG.toggleScorePredictor === 'function' && GG.settings.showScorePredictor) {
                  if (document.getElementById('gg-score-predictor')) {
                      document.getElementById('gg-score-predictor').style.display = 'none';
@@ -1604,6 +1698,14 @@
               if (GG.connectionLine) {
                  GG.connectionLine.setMap(null);
               }
+          } else {
+             if (typeof GG.clearSafetyEffects === 'function') GG.clearSafetyEffects();
+             
+             GG.settings.showStreetviewMarker = true;
+             GG.settings.showConnectionLine = true;
+             
+             if (GG.connectionLine) GG.connectionLine.setMap(GG.gmap);
+             if (GG.streetviewMarker) GG.streetviewMarker.setMap(GG.gmap);
           }
 
           GG.saveSettings();
@@ -1652,28 +1754,77 @@
             `;
             dynamicSettingsContainer.appendChild(infoBox);
 
-            const safetySettings = document.createElement("div");
-            safetySettings.style.cssText = "margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); paddingTop: 10px;";
+            const targetSelect = document.createElement("div");
+            targetSelect.className = "ghostguessr-setting";
+            targetSelect.style.cssText = "margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;";
             
-            const colorContainer = GG.createColorPicker("Outline Color", "safetyOutlineColor", "safetyOutlineColor", "safetyOutlineColor");
-            const colorWrapper = document.createElement("div");
-            colorWrapper.style.cssText = "display: flex; margin-bottom: 16px;";
-            colorWrapper.appendChild(colorContainer);
-            safetySettings.appendChild(colorWrapper);
+            const targetLabel = document.createElement("span");
+            targetLabel.textContent = "Target Region:";
+            targetLabel.style.cssText = "font-size: 13px; font-weight: 600; color: #e5e7eb;";
+            targetSelect.appendChild(targetLabel);
 
-            safetySettings.appendChild(GG.createSlider("Outline Width", "safetyOutlineWidth", 0.5, 5, 0.1, "px", (val) => `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="${GG.settings.safetyOutlineColor}" stroke-width="${val}"/>
-                </svg>
-            `));
-
-            safetySettings.appendChild(GG.createSlider("Fill Opacity", "safetyOutlineOpacity", 0, 1, 0.01, "%", (val) => `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="4" y="4" width="16" height="16" rx="2" fill="${GG.settings.safetyOutlineColor}" fill-opacity="${val}" stroke="${GG.settings.safetyOutlineColor}" stroke-width="2"/>
-                </svg>
-            `));
+            const toggleWrapper = document.createElement("div");
+            toggleWrapper.style.cssText = "display: flex; gap: 4px; background: rgba(0,0,0,0.2); padding: 2px; border-radius: 4px;";
             
-            dynamicSettingsContainer.appendChild(safetySettings);
+            const rOptions = [
+                { id: 'country', label: 'Country' },
+                { id: 'state', label: 'State' }
+            ];
+
+            const currentRegion = GG.settings.safetyModeRegion || 'country';
+
+            rOptions.forEach(opt => {
+                const rBtn = document.createElement("button");
+                const isAct = currentRegion === opt.id;
+                rBtn.textContent = opt.label;
+                rBtn.style.cssText = `
+                    padding: 4px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    border: none;
+                    cursor: pointer;
+                    background: ${isAct ? '#10b981' : 'transparent'};
+                    color: ${isAct ? '#fff' : '#9ca3af'};
+                    transition: all 0.2s;
+                `;
+                rBtn.onclick = () => {
+                    GG.settings.safetyModeRegion = opt.id;
+                    GG.saveSettings();
+                    if (typeof GG.updateSettingsVisibilityLegacy === 'function') GG.updateSettingsVisibilityLegacy();
+                    if (GG.settings.enabled) GG.placeMarker();
+                };
+                toggleWrapper.appendChild(rBtn);
+            });
+            targetSelect.appendChild(toggleWrapper);
+            dynamicSettingsContainer.appendChild(targetSelect);
+
+            const detailToggle = document.createElement("div");
+            detailToggle.className = "ghostguessr-setting";
+            detailToggle.style.cssText = "margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;";
+            
+            const detailLabel = document.createElement("span");
+            detailLabel.style.cssText = "font-size: 13px; font-weight: 600; color: #e5e7eb;";
+            detailLabel.textContent = "Detailed Outline";
+            
+            const detailInputWrap = document.createElement("div");
+            detailInputWrap.style.cssText = "display: flex;";
+            
+            const detailCheckbox = document.createElement("input");
+            detailCheckbox.type = "checkbox";
+            detailCheckbox.style.cursor = "pointer";
+            detailCheckbox.checked = GG.settings.safetyDetailed !== false; // Default true
+            
+            detailCheckbox.addEventListener("change", function () {
+                GG.settings.safetyDetailed = detailCheckbox.checked;
+                GG.saveSettings();
+                if (GG.settings.enabled) GG.placeMarker();
+            });
+            
+            detailInputWrap.appendChild(detailCheckbox);
+            detailToggle.appendChild(detailLabel);
+            detailToggle.appendChild(detailInputWrap);
+            dynamicSettingsContainer.appendChild(detailToggle);
         }
         else if (mode === "risky") {
             const infoBox = document.createElement("div");
@@ -1785,6 +1936,31 @@
             
             const streamerModeToggle = buildStreamerModeToggle();
             if (streamerModeToggle) dynamicSettingsContainer.appendChild(streamerModeToggle);
+        }
+
+        if (mode === "safety") {
+            const safetySettings = document.createElement("div");
+            safetySettings.style.cssText = "margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); paddingTop: 10px;";
+            
+            const colorContainer = GG.createColorPicker("Outline Color", "safetyOutlineColor", "safetyOutlineColor", "safetyOutlineColor");
+            const colorWrapper = document.createElement("div");
+            colorWrapper.style.cssText = "display: flex; margin-bottom: 16px;";
+            colorWrapper.appendChild(colorContainer);
+            safetySettings.appendChild(colorWrapper);
+
+            safetySettings.appendChild(GG.createSlider("Outline Width", "safetyOutlineWidth", 0.5, 5, 0.1, "px", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="${GG.settings.safetyOutlineColor}" stroke-width="${val}"/>
+                </svg>
+            `));
+
+            safetySettings.appendChild(GG.createSlider("Fill Opacity", "safetyOutlineOpacity", 0, 1, 0.01, "%", (val) => `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="16" height="16" rx="2" fill="${GG.settings.safetyOutlineColor}" fill-opacity="${val}" stroke="${GG.settings.safetyOutlineColor}" stroke-width="2"/>
+                </svg>
+            `));
+            
+            dynamicSettingsContainer.appendChild(safetySettings);
         }
 
         if (mode !== "safety") {
