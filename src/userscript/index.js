@@ -4,7 +4,7 @@ import './skinchanger.js';
 import './streamer.js';
 import './map.js';
 import './score-predictor.js';
-import './ui.js';
+import './ui/index.js';
 import './settings.js';
 import './updater.js';
 import './main.js';

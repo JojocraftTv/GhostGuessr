@@ -270,7 +270,6 @@
         return;
       }
 
-      // Safety Mode Check - Disable Predictor
       if (GG.settings.gameMode === "safety") {
           hideScorePredictor();
           return;
