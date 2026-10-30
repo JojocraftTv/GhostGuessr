@@ -23,12 +23,6 @@ GhostGuessr is a utility addon for GeoGuessr in the browser and on Steam.
 - **Auto-claim rewards** (web): daily shop and level-up rewards
 - **Skinchanger** (web + Steam): try every avatar item locally; toggling and saving apply live without a page reload
 
-All settings live in a **GhostGuessr tab** in GeoGuessr's own settings dialog (next to *General* and
-*Keybindings*) and in a **GhostGuessr** entry of the main-menu settings page (Steam home and
-account settings). The GhostGuessr hotkeys are also listed in the *Keybindings* tab, and the round
-ghost-marker button sits above the ⚙ button in the in-game HUD. There are no extra windows.
-The markup reference is in `new-style-website.txt`.
-
 ## Installation
 
 Choose your platform:
