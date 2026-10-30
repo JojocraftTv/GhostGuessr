@@ -29,7 +29,7 @@ First, you need to install Tampermonkey if you haven't already.
 
 ### Step 3: Install GhostGuessr Script
 
-1. Click this install link: **[Install GhostGuessr](https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/GhostGuessr.user.js)**
+1. Click this install link: **[Install GhostGuessr](https://github.com/JojocraftTv/GhostGuessr/releases/latest/download/GhostGuessr.user.js)**
 2. Tampermonkey will open automatically
 3. Click **"Install"** to confirm
 4. The script is now installed and active!
@@ -53,7 +53,7 @@ First, you need to install Tampermonkey if you haven't already.
 
 ### Step 2: Install GhostGuessr Script
 
-1. Click this install link: **[Install GhostGuessr](https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/GhostGuessr.user.js)**
+1. Click this install link: **[Install GhostGuessr](https://github.com/JojocraftTv/GhostGuessr/releases/latest/download/GhostGuessr.user.js)**
 2. Tampermonkey will open automatically
 3. Click **"Install"** to confirm
 4. The script is now installed and active!
@@ -63,6 +63,16 @@ First, you need to install Tampermonkey if you haven't already.
 1. Navigate to [GeoGuessr](https://www.geoguessr.com/)
 2. You should see GhostGuessr features enabled
 3. If not, refresh the page or check Tampermonkey settings
+
+---
+
+## Beta version
+
+Want the newest features before they are released? Install the beta instead
+(built from every commit, may contain bugs): **[Install GhostGuessr Beta](https://github.com/JojocraftTv/GhostGuessr/releases/download/beta/GhostGuessr.beta.user.js)**.
+Uninstall the normal version first so only one GhostGuessr runs.
+
+Both versions update automatically through Tampermonkey.
 
 ---
 

@@ -2,7 +2,12 @@
   "identifier": "default",
   "description": "Window controls access",
   "permissions": [
+    "core:default",
     "core:window:allow-close",
-    "core:window:allow-minimize"
+    "core:window:allow-minimize",
+    "core:window:allow-start-dragging"
+  ],
+  "windows": [
+    "main"
   ]
 }

@@ -10,10 +10,10 @@
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
 
-    <div class="titlebar">
-      <div class="titlebar-left">
+    <div class="titlebar" data-tauri-drag-region>
+      <div class="titlebar-left" data-tauri-drag-region>
         <img class="title-logo" src="./img/GhostGuessr.png" alt="GhostGuessr" />
-        <div class="title-text">GhostGuessr Patcher</div>
+        <div class="title-text" data-tauri-drag-region>GhostGuessr Patcher</div>
         <div class="titlebar-status" id="titlebar-status">
           <span class="status-dot"></span>
           <span class="status-text" id="titlebar-status-text"></span>
@@ -54,12 +54,24 @@
               </div>
             </div>
             <div class="field">
+              <label for="channel-select">Script Source</label>
+              <div class="input-row tight">
+                <select id="channel-select">
+                  <option value="stable">Stable (latest release)</option>
+                  <option value="beta">Beta (pre-release, every commit)</option>
+                  <option value="local">Local dev server</option>
+                </select>
+                <input id="local-url" type="text" class="hidden" placeholder="http://localhost:8080/ghostguessr-core.user.js" />
+              </div>
+              <p class="hint" id="channel-hint">The game downloads the newest script on every start.</p>
+            </div>
+            <div class="field">
               <label for="devtools-toggle">GeoGuessr DevTools</label>
               <div class="input-row tight">
                 <label class="toggle">
                   <input id="devtools-toggle" type="checkbox" />
                   <span class="toggle-track"></span>
-                  <span class="toggle-label">Enable</span>
+                  <span class="toggle-label">Enable (F12 / Ctrl+Shift+I in game)</span>
                 </label>
               </div>
             </div>

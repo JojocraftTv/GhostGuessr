@@ -1,39 +1,26 @@
 # GhostGuessr Steam Installation Guide
 
-This guide will help you install GhostGuessr for the Steam version of GeoGuessr.
+This guide installs GhostGuessr into the Steam version of GeoGuessr.
 
 ## Prerequisites
 
-- GeoGuessr installed via Steam
-- Windows operating system
+- GeoGuessr installed through Steam
+- Windows
 
 ---
 
-## Installation Steps
+## Installation
 
-### Step 1: Download the Patcher
-
-1. Go to the [Releases page](https://github.com/JojocraftTv/GhostGuessr/releases/latest)
-2. Download the latest **GhostGuessr-Patcher.exe**
-3. Save it to a location you can easily find (e.g., Downloads folder)
-
-### Step 2: Run the Patcher
-
-1. Open `GhostGuessr-Patcher.exe`
-3. If Windows SmartScreen appears, click **"More info"** → **"Run anyway"**
-
-### Step 3: Apply Patch
-
-1. Click **"Patch"** button
-2. Wait for the process to complete
-
-### Step 4: Launch GeoGuessr
-
-1. Close the patcher
-2. Launch GeoGuessr from Steam
-3. GhostGuessr features should now be available!
-
----
+1. Download **GhostGuessr-Patcher.exe** from the [latest release](https://github.com/JojocraftTv/GhostGuessr/releases/latest)
+   (or from the [beta pre-release](https://github.com/JojocraftTv/GhostGuessr/releases/tag/beta) for the newest test builds).
+2. Start it. If Windows SmartScreen appears, click **More info → Run anyway**.
+3. The patcher finds GeoGuessr in all of your Steam libraries automatically.
+   If it doesn't, open **Settings → Game Path → Browse** and select the game folder
+   (Steam → right-click GeoGuessr → **Manage → Browse local files**).
+4. Click **Patch**. A running game is closed automatically.
+5. Start GeoGuessr from Steam. GhostGuessr's settings are in the **GhostGuessr** entry of the
+   main-menu settings and in the **GhostGuessr** tab of the in-game settings (⚙). The round
+   ghost-marker button sits above the ⚙ button.
 
 ## Updating
 
@@ -95,10 +82,8 @@ You don't need to repatch it, it will be updated automatically.
 
 ## Still Having Issues?
 
-Open an issue on the [GitHub repository](https://github.com/JojocraftTv/GhostGuessr/issues) with:
-- Your Windows version
-- GeoGuessr version
-- Error messages or screenshots
+Open an issue on [GitHub](https://github.com/JojocraftTv/GhostGuessr/issues) and include
+your Windows version, your GeoGuessr version and the text from the patcher's Activity tab.
 
 ---
 

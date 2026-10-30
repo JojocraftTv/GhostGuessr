@@ -1,0 +1,107 @@
+name: Build
+
+# Reusable build: userscript (Linux) + patcher (Windows).
+# Called by beta.yml (every push to main), release.yml (v* tags) and ci.yml (pull requests).
+# Produces two artifacts: "script" and "patcher".
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to build, e.g. 3.1.0 or 3.1.0-beta.42"
+        required: true
+        type: string
+      channel:
+        description: "stable | beta"
+        required: true
+        type: string
+
+jobs:
+  script:
+    name: Userscript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        env:
+          GG_VERSION: ${{ inputs.version }}
+          GG_CHANNEL: ${{ inputs.channel }}
+        run: pnpm build
+
+      - name: Prepare release assets
+        run: node scripts/release-assets.js "${{ inputs.channel }}" "${{ inputs.version }}" release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: script
+          path: release/
+          if-no-files-found: error
+
+  patcher:
+    name: Patcher (Windows)
+    runs-on: windows-latest
+    env:
+      GG_CHANNEL: ${{ inputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/patcher/src-tauri
+          cache-on-failure: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install patcher dependencies
+        working-directory: src/patcher
+        run: pnpm install
+
+      - name: Set version
+        run: node scripts/set-version.js "${{ inputs.version }}"
+
+      - name: Test
+        working-directory: src/patcher/src-tauri
+        run: cargo test
+
+      - name: Build
+        working-directory: src/patcher
+        run: pnpm tauri build --no-bundle
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $exe = "src/patcher/src-tauri/target/release/GhostGuessr-Patcher.exe"
+          if (!(Test-Path $exe)) { throw "Patcher executable not found: $exe" }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item $exe release/GhostGuessr-Patcher.exe
+          $hash = (Get-FileHash release/GhostGuessr-Patcher.exe -Algorithm SHA256).Hash.ToLower()
+          @{ version = "${{ inputs.version }}"; channel = "${{ inputs.channel }}"; digest = "sha256:$hash" } |
+            ConvertTo-Json | Set-Content release/update.json -Encoding utf8
+          Get-Content release/update.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patcher
+          path: release/
+          if-no-files-found: error

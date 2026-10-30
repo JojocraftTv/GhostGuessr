@@ -4,91 +4,119 @@ const invoke =
   tauri.invoke ||
   (tauri.tauri && tauri.tauri.invoke) ||
   null;
-const dialog =
-  (tauri.dialog && tauri.dialog.open ? tauri.dialog : null) ||
-  (tauri.plugins && tauri.plugins.dialog ? tauri.plugins.dialog : null) ||
-  null;
+const listen = (tauri.event && tauri.event.listen) || null;
 
 const resourcesInput = document.getElementById("resources-path");
 const devtoolsToggle = document.getElementById("devtools-toggle");
+const channelSelect = document.getElementById("channel-select");
+const localUrlInput = document.getElementById("local-url");
+const channelHint = document.getElementById("channel-hint");
 const uninstallBtn = document.getElementById("unpatch-btn");
 const patchBtn = document.getElementById("patch-btn");
 const titlebarStatus = document.getElementById("titlebar-status");
 const titlebarStatusText = document.getElementById("titlebar-status-text");
-const statusDot = document.querySelector(".status-dot");
 const logEl = document.getElementById("log");
 const SETTINGS_KEY = "ghostguessr_patcher_settings";
+const DEFAULT_LOCAL_URL = "http://localhost:8080/ghostguessr-core.user.js";
+
+const CHANNEL_HINTS = {
+  stable: "The game downloads the newest full release on every start.",
+  beta: "The game downloads the newest beta (built from every commit) on every start.",
+  local: "The game loads the script from your local server (pnpm serve) on every page load.",
+};
+
+/* ---------- settings ---------- */
+
+let hasSavedChannel = true;
 
 const loadUiSettings = () => {
-  if (!devtoolsToggle) return;
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.enableDevtools === "boolean") {
-      devtoolsToggle.checked = parsed.enableDevtools;
-    }
-  } catch {}
+    const parsed = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (typeof parsed.enableDevtools === "boolean") devtoolsToggle.checked = parsed.enableDevtools;
+    const channel = parsed.channel === "dev" ? "beta" : parsed.channel; // older patchers called it "dev"
+    if (["stable", "beta", "local"].includes(channel)) channelSelect.value = channel;
+    else hasSavedChannel = false;
+    localUrlInput.value = parsed.localUrl || DEFAULT_LOCAL_URL;
+    if (parsed.resourcesPath) resourcesInput.value = parsed.resourcesPath;
+  } catch {
+    localUrlInput.value = DEFAULT_LOCAL_URL;
+  }
+  updateChannelUi();
 };
 
 const saveUiSettings = () => {
-  if (!devtoolsToggle) return;
   try {
     window.localStorage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ enableDevtools: devtoolsToggle.checked }),
+      JSON.stringify({
+        enableDevtools: devtoolsToggle.checked,
+        channel: channelSelect.value,
+        localUrl: localUrlInput.value.trim() || DEFAULT_LOCAL_URL,
+        resourcesPath: resourcesInput.value.trim(),
+      }),
     );
   } catch {}
 };
+
+const updateChannelUi = () => {
+  localUrlInput.classList.toggle("hidden", channelSelect.value !== "local");
+  channelHint.textContent = CHANNEL_HINTS[channelSelect.value] || "";
+};
+
+/* ---------- log / status ---------- */
 
 const log = (message, level = "info") => {
   const time = new Date().toLocaleTimeString();
   const entry = document.createElement("div");
   entry.className = `log-entry ${level}`;
-  entry.innerHTML = `<span class="tag">${level.toUpperCase()}</span><span>[${time}] ${message}</span>`;
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = level.toUpperCase();
+  const text = document.createElement("span");
+  text.textContent = `[${time}] ${message}`;
+  entry.append(tag, text);
   logEl.appendChild(entry);
   logEl.scrollTop = logEl.scrollHeight;
 };
 
 const setBusy = (isBusy) => {
-  document.getElementById("patch-btn").disabled = isBusy;
-  document.getElementById("unpatch-btn").disabled = isBusy;
-  document.getElementById("detect-btn").disabled = isBusy;
-  document.getElementById("browse-btn").disabled = isBusy;
+  for (const id of ["patch-btn", "unpatch-btn", "detect-btn", "browse-btn"]) {
+    document.getElementById(id).disabled = isBusy;
+  }
   document.body.classList.toggle("is-busy", isBusy);
 };
 
 const setStatus = (text, tone) => {
-  if (titlebarStatusText) {
-    titlebarStatusText.textContent = text || "";
-  }
+  if (titlebarStatusText) titlebarStatusText.textContent = text || "";
   if (titlebarStatus) {
-    const danger = tone === "danger";
-    const success = tone === "success";
-    titlebarStatus.classList.toggle("success", success);
-    titlebarStatus.classList.toggle("danger", danger);
+    titlebarStatus.classList.toggle("success", tone === "success");
+    titlebarStatus.classList.toggle("danger", tone === "danger");
   }
 };
 
-const getPayload = () => ({
-  resourcesPath: resourcesInput.value.trim() || null,
-  enableDevtools: devtoolsToggle ? devtoolsToggle.checked : false,
+const gamePath = () => resourcesInput.value.trim() || null;
+
+const getOptions = () => ({
+  devtools: devtoolsToggle.checked,
+  autoUpdate: true,
+  channel: channelSelect.value,
+  localUrl: channelSelect.value === "local" ? localUrlInput.value.trim() || DEFAULT_LOCAL_URL : null,
 });
 
+/* ---------- actions ---------- */
+
 const autoDetect = async () => {
-  if (!invoke) {
-    log("Tauri invoke not available.", "error");
-    return;
-  }
+  if (!invoke) return log("Tauri invoke not available.", "error");
   setStatus("Detecting...", "info");
   try {
-    const path = await invoke("detect_resources_path");
+    const path = await invoke("detect_game");
     if (path) {
       resourcesInput.value = path;
-      log(`Detected resources path: ${path}`, "success");
+      saveUiSettings();
+      log(`Detected game folder: ${path}`, "success");
       await refreshStatus();
     } else {
-      log("Could not auto-detect resources path.", "warn");
+      log("Could not auto-detect the game folder. Use Settings → Browse.", "warn");
       setStatus("Needs Path", "danger");
     }
   } catch (error) {
@@ -97,42 +125,49 @@ const autoDetect = async () => {
   }
 };
 
-const refreshStatus = async () => {
+const refreshStatus = async ({ quiet = false } = {}) => {
   if (!invoke) return;
   try {
-    const status = await invoke("get_status", getPayload());
-    if (status.resources_path && !resourcesInput.value) {
-      resourcesInput.value = status.resources_path;
-    }
-    if (status.patched) {
+    const status = await invoke("get_status", { path: gamePath() });
+    if (status.gamePath && !resourcesInput.value) resourcesInput.value = status.gamePath;
+    const state = status.state.kind;
+    if (state === "patched") {
       setStatus("Patched", "success");
-      log("Already patched. You can uninstall to restore.", "warn");
+      if (!quiet) {
+        log(
+          `Patched (script ${status.state.scriptVersion}, source: ${status.state.channel}${status.state.devtools ? ", DevTools on" : ""}).`,
+          "success",
+        );
+      }
+      patchBtn.textContent = "Repatch";
       uninstallBtn.classList.remove("hidden");
-      patchBtn.classList.add("hidden");
+    } else if (state === "legacy") {
+      setStatus("Old Patch", "danger");
+      if (!quiet) log("Old GhostGuessr patch found. Press Patch to upgrade.", "warn");
+      patchBtn.textContent = "Patch";
+      uninstallBtn.classList.toggle("hidden", !status.backupExists);
     } else {
       setStatus("Ready", "info");
+      patchBtn.textContent = "Patch";
       uninstallBtn.classList.add("hidden");
-      patchBtn.classList.remove("hidden");
     }
+    patchBtn.classList.remove("hidden");
   } catch (error) {
     log(`Status check failed: ${error}`, "error");
-    setStatus("Ready", "info");
+    setStatus("Needs Path", "danger");
   }
 };
 
 const patch = async () => {
-  if (!invoke) {
-    log("Tauri invoke not available.", "error");
-    return;
-  }
-  const payload = getPayload();
+  if (!invoke) return log("Tauri invoke not available.", "error");
+  saveUiSettings();
   setStatus("Patching...", "info");
   log("Starting patch...", "info");
   setBusy(true);
   try {
-    const result = await invoke("patch", payload);
+    const result = await invoke("install", { path: gamePath(), options: getOptions() });
     log(result || "Patch completed.", "success");
-    await refreshStatus();
+    await refreshStatus({ quiet: true });
   } catch (error) {
     log(`Patch failed: ${error}`, "error");
     setStatus("Error", "danger");
@@ -142,18 +177,14 @@ const patch = async () => {
 };
 
 const unpatch = async () => {
-  if (!invoke) {
-    log("Tauri invoke not available.", "error");
-    return;
-  }
-  const payload = getPayload();
+  if (!invoke) return log("Tauri invoke not available.", "error");
   setStatus("Restoring...", "info");
   log("Starting uninstall...", "info");
   setBusy(true);
   try {
-    const result = await invoke("unpatch", payload);
+    const result = await invoke("uninstall", { path: gamePath() });
     log(result || "Uninstall completed.", "success");
-    await refreshStatus();
+    await refreshStatus({ quiet: true });
   } catch (error) {
     log(`Uninstall failed: ${error}`, "error");
     setStatus("Error", "danger");
@@ -164,10 +195,11 @@ const unpatch = async () => {
 
 const browseDir = async () => {
   try {
-    const selected = await invoke("browse_resources_path");
+    const selected = await invoke("browse_game");
     if (selected) {
       resourcesInput.value = selected;
-      log(`Selected resources path: ${selected}`, "success");
+      saveUiSettings();
+      log(`Selected game folder: ${selected}`, "success");
       await refreshStatus();
     }
   } catch (error) {
@@ -175,151 +207,93 @@ const browseDir = async () => {
   }
 };
 
-const clearLog = () => {
-  logEl.innerHTML = "";
-};
-
 document.getElementById("detect-btn").addEventListener("click", autoDetect);
-document.getElementById("patch-btn").addEventListener("click", patch);
-document.getElementById("unpatch-btn").addEventListener("click", unpatch);
+patchBtn.addEventListener("click", patch);
+uninstallBtn.addEventListener("click", unpatch);
 document.getElementById("browse-btn").addEventListener("click", browseDir);
-document.getElementById("clear-log-btn").addEventListener("click", clearLog);
-if (devtoolsToggle) {
-  devtoolsToggle.addEventListener("change", saveUiSettings);
-}
-loadUiSettings();
+document.getElementById("clear-log-btn").addEventListener("click", () => (logEl.innerHTML = ""));
+devtoolsToggle.addEventListener("change", saveUiSettings);
+channelSelect.addEventListener("change", () => {
+  updateChannelUi();
+  saveUiSettings();
+  log(`Script source: ${channelSelect.options[channelSelect.selectedIndex].text}. Press Patch/Repatch to apply.`, "info");
+});
+localUrlInput.addEventListener("change", saveUiSettings);
+resourcesInput.addEventListener("change", () => {
+  saveUiSettings();
+  refreshStatus();
+});
+
+/* ---------- update check ---------- */
 
 const checkUpdate = async () => {
   if (!invoke) return;
   try {
     const info = await invoke("check_update");
-    if (info.available) {
-      const notifyEl = document.getElementById("update-notification");
-      if (notifyEl) {
-        notifyEl.innerHTML = `New version found: <strong>${info.version}</strong>`;
-        notifyEl.classList.remove("hidden");
-        notifyEl.title = "Click to download";
-        
-        notifyEl.addEventListener("click", () => {
-          const targetUrl = info.url || "https://github.com/JojocraftTv/GhostGuessr/releases";
-          invoke("open_url", { url: targetUrl });
-        });
-      }
-    }
+    if (!info.available) return;
+    const notifyEl = document.getElementById("update-notification");
+    if (!notifyEl) return;
+    notifyEl.textContent = "New version found: ";
+    const strong = document.createElement("strong");
+    strong.textContent = info.latest;
+    notifyEl.appendChild(strong);
+    notifyEl.classList.remove("hidden");
+    notifyEl.title = "Click to download";
+    notifyEl.addEventListener("click", () => invoke("open_url", { url: info.url || "https://github.com/JojocraftTv/GhostGuessr/releases" }));
   } catch (err) {
     console.error(`Update check failed: ${err}`);
   }
 };
 
+/* ---------- boot ---------- */
+
+loadUiSettings();
+
 if (!invoke) {
   setStatus("Tauri runtime missing", "danger");
-  log(
-    "Tauri invoke not available. Run via `cargo tauri dev` or the built EXE.",
-    "error",
-  );
-  document.getElementById("patch-btn").disabled = true;
-  document.getElementById("unpatch-btn").disabled = true;
-  document.getElementById("detect-btn").disabled = true;
-  document.getElementById("browse-btn").disabled = true;
+  log("Tauri invoke not available. Run via `cargo tauri dev` or the built EXE.", "error");
+  for (const id of ["patch-btn", "unpatch-btn", "detect-btn", "browse-btn"]) document.getElementById(id).disabled = true;
 } else {
-  autoDetect();
-  checkUpdate();
+  if (listen) listen("patcher-log", (event) => log(event.payload.message, event.payload.level));
+  // A beta patcher defaults to the beta script until the user picks a source.
+  if (!hasSavedChannel) {
+    invoke("patcher_channel")
+      .then((channel) => {
+        if (channel === "beta") {
+          channelSelect.value = "beta";
+          updateChannelUi();
+        }
+      })
+      .catch(() => {});
+  }
+  (resourcesInput.value ? refreshStatus() : autoDetect()).then(checkUpdate);
 }
 
 document.querySelectorAll(".tab-btn").forEach((button) => {
   button.addEventListener("click", () => {
-    if (!button.dataset.tab) {
-      return;
-    }
-    document
-      .querySelectorAll(".tab-btn")
-      .forEach((btn) => btn.classList.remove("active"));
-    document
-      .querySelectorAll(".tab-content")
-      .forEach((pane) => pane.classList.remove("active"));
+    if (!button.dataset.tab) return;
+    document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach((pane) => pane.classList.remove("active"));
     button.classList.add("active");
-    const target = button.getAttribute("data-tab");
-    const pane = document.querySelector(`[data-tab-content=\"${target}\"]`);
-    if (pane) {
-      pane.classList.add("active");
-    }
+    const pane = document.querySelector(`[data-tab-content="${button.getAttribute("data-tab")}"]`);
+    if (pane) pane.classList.add("active");
   });
 });
 
-document
-  .getElementById("github-link")
-  .addEventListener("click", async (event) => {
-    event.preventDefault();
-    const url = "https://github.com/JojocraftTv/GhostGuessr";
-    if (tauri && tauri.core && tauri.core.invoke) {
-      try {
-        await tauri.core.invoke("open_url", { url });
-        return;
-      } catch {}
-    }
-    window.open(url, "_blank");
-  });
-
-const windowApi = tauri.window || null;
-const getWindow = () => {
-  if (!windowApi) return null;
-  if (windowApi.appWindow) return windowApi.appWindow;
-  if (windowApi.getCurrentWindow) return windowApi.getCurrentWindow();
-  if (windowApi.getCurrent) return windowApi.getCurrent();
-  return null;
-};
-
-document.getElementById("minimize-btn").addEventListener("click", async () => {
-  let invokeError = null;
-  if (invoke) {
-    try {
-      await invoke("minimize_window");
-      return;
-    } catch (err) {
-      invokeError = err;
-    }
+document.getElementById("github-link").addEventListener("click", async (event) => {
+  event.preventDefault();
+  try {
+    await invoke("open_url", { url: "https://github.com/JojocraftTv/GhostGuessr" });
+  } catch {
+    window.open("https://github.com/JojocraftTv/GhostGuessr", "_blank");
   }
-  const win = getWindow();
-  if (win && win.minimize) {
-    try {
-      await win.minimize();
-      return;
-    } catch {}
-  }
-  log(
-    invokeError ? `Minimize failed: ${invokeError}` : "Minimize not available.",
-    "error",
-  );
 });
 
-document.getElementById("close-btn").addEventListener("click", async () => {
-  let invokeError = null;
-  if (invoke) {
-    try {
-      await invoke("close_window");
-      return;
-    } catch (err) {
-      invokeError = err;
-    }
-  }
-  const win = getWindow();
-  if (win && win.close) {
-    try {
-      await win.close();
-      return;
-    } catch {}
-  }
-  log(
-    invokeError ? `Close failed: ${invokeError}` : "Close not available.",
-    "error",
-  );
-});
+document.getElementById("minimize-btn").addEventListener("click", () => invoke && invoke("minimize_window").catch((e) => log(`Minimize failed: ${e}`, "error")));
+document.getElementById("close-btn").addEventListener("click", () => invoke && invoke("close_window").catch((e) => log(`Close failed: ${e}`, "error")));
 
 window.addEventListener("keydown", (event) => {
-  if (
-    event.key === "F12" ||
-    (event.ctrlKey && event.shiftKey && ["I", "J", "C"].includes(event.key))
-  ) {
+  if (event.key === "F12" || (event.ctrlKey && event.shiftKey && ["I", "J", "C"].includes(event.key.toUpperCase()))) {
     event.preventDefault();
     event.stopPropagation();
   }

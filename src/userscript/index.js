@@ -1,10 +1,7 @@
-import './state.js';
-import './utils.js';
-import './skinchanger.js';
-import './streamer.js';
-import './map.js';
-import './score-predictor.js';
-import './ui/index.js';
-import './settings.js';
-import './updater.js';
-import './main.js';
+import { start } from "./app.js";
+
+try {
+  start();
+} catch (error) {
+  console.error("[GhostGuessr] failed to start", error);
+}

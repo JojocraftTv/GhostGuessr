@@ -577,3 +577,23 @@ input::placeholder {
     align-items: flex-start;
   }
 }
+
+select {
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--stroke);
+  background: rgba(10, 14, 20, 0.8);
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+select:focus,
+input[type="text"]:focus {
+  outline: none;
+  border-color: rgba(255, 77, 77, 0.5);
+}
+
+.tab-content[data-tab-content="settings"] {
+  overflow-y: auto;
+}

@@ -1,506 +1,293 @@
+//! Minimal, header-level ASAR archive editing.
+//!
+//! The patcher never extracts and re-packs the game archive. It only rewrites
+//! the JSON header and appends new file contents to the end of the data
+//! section. Everything else — offsets of existing files, `unpacked` flags for
+//! native modules (koffi, steam_api64.dll, ...), symlinks, executable bits —
+//! stays exactly as the game shipped it.
+//!
+//! Layout (Chromium pickle encoding):
+//! ```text
+//! u32 4 | u32 header_pickle_len | u32 payload_len | u32 json_len | json | pad to 4 | data...
+//! ```
+//! File offsets in the header are relative to the start of `data`.
+
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::{
-  collections::HashMap,
-  ffi::OsStr,
-  fs::{File, Metadata},
-  io::{Read, Seek, Write},
+  fs::{self, File},
+  io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
   path::{Path, PathBuf},
 };
 
-#[cfg(not(target_os = "windows"))]
-use std::os::unix::prelude::MetadataExt;
+pub const BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
-use crate::{
-  crawlfs::{crawl_filesystem, determine_file_type},
-  disk::{read_archive_header, FileItem},
-  error::{Error, ErrorKind, Result},
-  filesystem::{get_dir, Filesystem},
-  integrity::{get_file_integrity, BUFFER_SIZE},
-  node::{DirectoryNode, FileNode, LinkNode, Node},
-};
-use glob::MatchOptions;
-use path_absolutize::*;
+#[derive(Debug)]
+pub struct Archive {
+  pub path: PathBuf,
+  pub header: Value,
+  /// Absolute file offset where the data section starts.
+  pub data_offset: u64,
+  /// Length of the data section.
+  pub data_len: u64,
+}
 
-#[cfg(not(target_os = "windows"))]
-use std::os::unix::fs::OpenOptionsExt;
+fn read_u32(buf: &[u8], at: usize) -> io::Result<u32> {
+  buf
+    .get(at..at + 4)
+    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    .ok_or_else(|| invalid("archive header is truncated"))
+}
 
-#[cfg(target_os = "windows")]
-const FOLLOW_LINKS: bool = true;
+fn invalid(msg: &str) -> io::Error {
+  io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
+}
 
-#[cfg(not(target_os = "windows"))]
-const FOLLOW_LINKS: bool = false;
+/// Integrity block in the format Electron expects.
+pub fn integrity(data: &[u8]) -> Value {
+  let blocks: Vec<String> = data
+    .chunks(BLOCK_SIZE)
+    .map(|chunk| hex::encode(Sha256::digest(chunk)))
+    .collect();
+  json!({
+    "algorithm": "SHA256",
+    "hash": hex::encode(Sha256::digest(data)),
+    "blockSize": BLOCK_SIZE,
+    "blocks": if blocks.is_empty() { vec![hex::encode(Sha256::digest([]))] } else { blocks },
+  })
+}
 
-#[cfg(target_os = "windows")]
-fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
-  let fullorigin = get_dir(link.as_ref()).join(&original);
-  if std::fs::metadata(&fullorigin)?.is_dir() {
-    std::os::windows::fs::symlink_dir(&original, link)
-  } else {
-    std::os::windows::fs::symlink_file(&original, link)
+/// Serialises a header JSON string into the two pickles that prefix the archive.
+pub fn encode_header(json_text: &str) -> Vec<u8> {
+  let json_len = json_text.len();
+  let padded = (json_len + 3) & !3;
+  let payload_len = 4 + padded; // string length prefix + padded string
+  let header_pickle_len = 4 + payload_len; // pickle payload size prefix + payload
+  let mut out = Vec::with_capacity(8 + header_pickle_len);
+  out.extend_from_slice(&4u32.to_le_bytes());
+  out.extend_from_slice(&(header_pickle_len as u32).to_le_bytes());
+  out.extend_from_slice(&(payload_len as u32).to_le_bytes());
+  out.extend_from_slice(&(json_len as u32).to_le_bytes());
+  out.extend_from_slice(json_text.as_bytes());
+  out.resize(8 + header_pickle_len, 0);
+  out
+}
+
+impl Archive {
+  pub fn open(path: &Path) -> io::Result<Self> {
+    let mut file = File::open(path)?;
+    let total = file.metadata()?.len();
+    let mut size_pickle = [0u8; 8];
+    file.read_exact(&mut size_pickle)?;
+    let header_pickle_len = read_u32(&size_pickle, 4)? as usize;
+    if header_pickle_len < 8 || header_pickle_len as u64 > total {
+      return Err(invalid("not an asar archive"));
+    }
+    let mut header_pickle = vec![0u8; header_pickle_len];
+    file.read_exact(&mut header_pickle)?;
+    let json_len = read_u32(&header_pickle, 4)? as usize;
+    let json_bytes = header_pickle
+      .get(8..8 + json_len)
+      .ok_or_else(|| invalid("archive header is truncated"))?;
+    let header: Value = serde_json::from_slice(json_bytes).map_err(|e| invalid(&format!("bad asar header: {e}")))?;
+    if !header.get("files").map(Value::is_object).unwrap_or(false) {
+      return Err(invalid("asar header has no files"));
+    }
+    let data_offset = 8 + header_pickle_len as u64;
+    Ok(Self { path: path.to_path_buf(), header, data_offset, data_len: total - data_offset })
+  }
+
+  fn unpacked_dir(&self) -> PathBuf {
+    let mut name = self.path.as_os_str().to_owned();
+    name.push(".unpacked");
+    PathBuf::from(name)
+  }
+
+  /// Header node for `a/b/c.js` (forward slashes), if it exists.
+  pub fn node(&self, entry: &str) -> Option<&Value> {
+    let mut node = &self.header;
+    for part in entry.split('/').filter(|p| !p.is_empty()) {
+      node = node.get("files")?.get(part)?;
+    }
+    Some(node)
+  }
+
+  pub fn exists(&self, entry: &str) -> bool {
+    self.node(entry).is_some()
+  }
+
+  /// Reads a regular file from the archive (or from `app.asar.unpacked`).
+  pub fn read(&self, entry: &str) -> io::Result<Vec<u8>> {
+    let node = self.node(entry).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("{entry} not in archive")))?;
+    self.read_node(entry, node)
+  }
+
+  /// Reads the file described by `node` (which may come from an older header of this archive).
+  pub fn read_node(&self, entry: &str, node: &Value) -> io::Result<Vec<u8>> {
+    if node.get("unpacked").and_then(Value::as_bool).unwrap_or(false) {
+      return fs::read(self.unpacked_dir().join(entry));
+    }
+    let size = node.get("size").and_then(Value::as_u64).ok_or_else(|| invalid("entry has no size"))?;
+    let offset: u64 = match node.get("offset") {
+      Some(Value::String(s)) => s.parse().map_err(|_| invalid("bad offset"))?,
+      Some(Value::Number(n)) => n.as_u64().ok_or_else(|| invalid("bad offset"))?,
+      _ => return Err(invalid("entry has no offset")),
+    };
+    if offset + size > self.data_len {
+      return Err(invalid("entry points outside of the archive"));
+    }
+    let mut file = File::open(&self.path)?;
+    file.seek(SeekFrom::Start(self.data_offset + offset))?;
+    let mut buf = vec![0u8; size as usize];
+    file.read_exact(&mut buf)?;
+    Ok(buf)
+  }
+
+  pub fn read_string(&self, entry: &str) -> io::Result<String> {
+    String::from_utf8(self.read(entry)?).map_err(|_| invalid("entry is not UTF-8"))
   }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
-  std::os::unix::fs::symlink(original, link)
+/// A pending set of header edits plus data to append.
+pub struct Edit {
+  header: Value,
+  /// Bytes of the original data section to keep (allows dropping a previous patch).
+  keep_data: u64,
+  appended: Vec<u8>,
 }
 
-#[derive(Clone)]
-pub struct ListOptions {
-  pub is_pack: bool,
-}
-
-impl ListOptions {
-  pub fn new() -> Self {
-    ListOptions { is_pack: false }
-  }
-}
-
-pub struct AsarFile {
-  fd: File,
-  filesystem: Filesystem,
-}
-
-impl AsarFile {
-  pub fn open<T: AsRef<Path>>(archive: T) -> Result<Self> {
-    let (_, header, header_size, fd) = read_archive_header(&archive)?;
-    let mut filesystem = Filesystem::new(archive.as_ref().absolutize()?.to_path_buf());
-    filesystem.header = header;
-    filesystem.header_size = header_size as u64;
-    Ok(AsarFile { fd, filesystem })
+impl Edit {
+  pub fn new(archive: &Archive) -> Self {
+    Self { header: archive.header.clone(), keep_data: archive.data_len, appended: Vec::new() }
   }
 
-  pub fn list(&self, options: &ListOptions) -> Result<Vec<String>> {
-    self.filesystem.list_files(options)
+  /// Starts from an explicit header / data length (used to revert an earlier patch).
+  pub fn with_base(header: Value, keep_data: u64) -> Self {
+    Self { header, keep_data, appended: Vec::new() }
   }
 
-  fn extract_file_node<T: AsRef<Path>>(
-    &mut self,
-    filename: &str,
-    node: FileNode,
-    dest: T,
-  ) -> Result<()> {
-    let FileNode {
-      offset,
-      size,
-      unpacked,
-      executable,
-      ..
-    } = node;
-    let info_size = size;
-    let info_unpacked = unpacked.unwrap_or(false);
-    if info_unpacked {
-      let unpacked_dir = self.filesystem.src.to_string_lossy().as_ref().to_owned() + &".unpacked";
-      let target_path = PathBuf::from(unpacked_dir).join(&filename);
-      std::fs::create_dir_all(crate::filesystem::get_dir(&dest))?;
-      std::fs::copy(target_path, &dest)?;
-    } else {
-      let info_offset = u64::from_str_radix(
-        &offset
-          .as_ref()
-          .ok_or_else(|| Error::new(ErrorKind::UnknownOffset(filename.to_owned())))?,
-        10,
-      )?;
-      let offset = 8u64 + self.filesystem.header_size + info_offset;
-
-      let mut left = info_size;
-      self.fd.seek(std::io::SeekFrom::Start(offset))?;
-      let mut options = std::fs::OpenOptions::new();
-      options.create(true).write(true);
-      if executable.unwrap_or(false) {
-        #[cfg(not(target_os = "windows"))]
-        options.mode(0o755);
-      }
-      let mut buffer = vec![0; BUFFER_SIZE];
-      let mut dest_fd = options.open(&dest)?;
-      while left > 0 {
-        let read_size = self.fd.read(&mut buffer)?;
-        assert!(read_size > 0, "failed to read file: {}", filename);
-        if read_size > left {
-          dest_fd.write(&buffer[0..left])?;
-          break;
-        } else {
-          dest_fd.write(&buffer[0..read_size])?;
-          left -= read_size;
-        };
-      }
+  fn dir_mut(&mut self, parts: &[&str]) -> &mut Map<String, Value> {
+    let mut node = &mut self.header;
+    for part in parts {
+      let files = node
+        .as_object_mut()
+        .expect("asar node is an object")
+        .entry("files")
+        .or_insert_with(|| Value::Object(Map::new()));
+      node = files
+        .as_object_mut()
+        .expect("files is an object")
+        .entry(part.to_string())
+        .or_insert_with(|| json!({ "files": {} }));
     }
-
-    Ok(())
+    node
+      .as_object_mut()
+      .expect("asar node is an object")
+      .entry("files")
+      .or_insert_with(|| Value::Object(Map::new()))
+      .as_object_mut()
+      .expect("files is an object")
   }
 
-  pub fn extract_all<T: AsRef<Path>>(&mut self, dest: T) -> Result<()> {
-    let filenames = self.list(&ListOptions::new())?;
-    std::fs::create_dir_all(&dest)?;
-
-    let mut extraction_erros: Vec<Error> = Vec::new();
-    for full_path in filenames.iter() {
-      let filename = &full_path[1..];
-      let dest_ref = dest.as_ref();
-      let dest_filename = dest_ref.join(filename);
-      let file = self.filesystem.get_file(filename, Some(FOLLOW_LINKS))?;
-
-      match file {
-        Node::Directory(..) => {
-          std::fs::create_dir_all(&dest_filename)?;
-        }
-        Node::Link(LinkNode { link }) => {
-          let link_src_path = dest_ref.join(link);
-          let link_src_path = crate::filesystem::get_dir(link_src_path);
-          let link_dest_path = crate::filesystem::get_dir(&dest_filename);
-          let relative_path = crate::filesystem::relative(&link_dest_path, &link_src_path)?;
-          let _ = std::fs::remove_file(&dest_filename);
-          let link_to =
-            relative_path.join(PathBuf::from(link).file_name().unwrap_or(&OsStr::new("..")));
-          symlink(link_to, &dest_filename)?;
-        }
-        Node::File(node) => {
-          if let Err(e) = self.extract_file_node(filename, node.clone(), dest_filename.as_path()) {
-            extraction_erros.push(e);
-          }
-        }
-      };
-    }
-
-    if extraction_erros.len() > 0 {
-      return Err(Error::new(ErrorKind::Extraction(extraction_erros)));
-    }
-
-    Ok(())
-  }
-}
-
-pub struct CreateOptions {
-  pub pattern: String,
-  pub dot: Option<bool>,
-  pub ordering: Option<PathBuf>,
-  pub unpack_dir: Option<String>,
-  pub unpack: Option<String>,
-  pub transform: Option<fn(&str) -> Option<Box<dyn Transform>>>,
-}
-
-pub trait Transform: Read + Write {
-  fn transform(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-    Ok(self.write(buf)?)
-  }
-}
-
-impl CreateOptions {
-  pub fn new() -> Self {
-    CreateOptions {
-      pattern: "/**/*".to_owned(),
-      dot: None,
-      ordering: None,
-      unpack_dir: None,
-      unpack: None,
-      transform: None,
-    }
-  }
-}
-
-pub fn list_package<T: AsRef<Path>>(archive: T) -> Result<Vec<String>> {
-  list_package_with_options(archive, &ListOptions::new())
-}
-
-pub fn list_package_with_options<T: AsRef<Path>>(
-  archive: T,
-  options: &ListOptions,
-) -> Result<Vec<String>> {
-  let asar = AsarFile::open(archive)?;
-  asar.list(options)
-}
-
-pub fn extract_all<T: AsRef<Path>, U: AsRef<Path>>(archive: T, dest: U) -> Result<()> {
-  let mut asar = AsarFile::open(archive)?;
-  asar.extract_all(dest)
-}
-
-pub fn create_package_with_options<S: AsRef<Path>, D: AsRef<Path>>(
-  src: S,
-  dest: D,
-  options: &CreateOptions,
-) -> Result<()> {
-  let (filenames, mut metadata) = crawl_filesystem(
-    src.as_ref().to_string_lossy().to_string() + &options.pattern,
-    MatchOptions {
-      case_sensitive: true,
-      require_literal_separator: false,
-      require_literal_leading_dot: options.dot.map(|v| !v).unwrap_or(false),
-    },
-  )?;
-
-  create_package_from_files(src, dest, &filenames, &mut metadata, options)
-}
-
-pub fn create_package_from_files<S: AsRef<Path>, D: AsRef<Path>>(
-  src: S,
-  dest: D,
-  filenames: &Vec<String>,
-  metadata: &mut HashMap<String, Metadata>,
-  options: &CreateOptions,
-) -> Result<()> {
-  let src = src.as_ref().absolutize()?;
-  let dest = dest.as_ref().absolutize()?;
-
-  let mut filesystem = Filesystem::new(src.to_path_buf());
-
-  let mut filenames_sorted: Vec<String> = vec![];
-  if let Some(ordering) = &options.ordering {
-    let mut ordering_files: Vec<String> = vec![];
-    for line in std::fs::read_to_string(ordering)?.lines() {
-      let mut l: &str = line;
-      if l.contains(":") {
-        l = line.split(':').last().unwrap();
-      }
-      l = l.trim();
-      if l.starts_with("/") {
-        l = &l[1..];
-      }
-      ordering_files.push(l.to_owned());
-    }
-
-    let mut ordering: Vec<String> = vec![];
-    for f in ordering_files {
-      let mut str: PathBuf = src.to_path_buf();
-      for path_component in f.split(['/', '\\']) {
-        str = str.join(Path::new(path_component));
-        ordering.push(str.to_string_lossy().to_string());
-      }
-    }
-
-    let mut missing = 0;
-    let total = filenames.len();
-
-    for file in ordering {
-      if !filenames_sorted.contains(&file) && filenames.contains(&file) {
-        filenames_sorted.push(file)
-      }
-    }
-
-    for file in filenames {
-      if !filenames_sorted.contains(file) {
-        filenames_sorted.push(file.clone());
-        missing += 1
-      }
-    }
-
-    println!(
-      "Ordering file has {}% coverage.",
-      ((total - missing) / total) * 100
-    );
-  } else {
-    for file in filenames {
-      filenames_sorted.push(file.clone());
-    }
+  /// Adds or replaces a file. Replaced content stays in the data section but is no longer referenced.
+  pub fn put(&mut self, entry: &str, data: &[u8]) {
+    let parts: Vec<&str> = entry.split('/').filter(|p| !p.is_empty()).collect();
+    let (name, dirs) = parts.split_last().expect("entry has a name");
+    let offset = self.keep_data + self.appended.len() as u64;
+    self.appended.extend_from_slice(data);
+    let node = json!({ "size": data.len(), "offset": offset.to_string(), "integrity": integrity(data) });
+    self.dir_mut(dirs).insert(name.to_string(), node);
   }
 
-  let mut unpack_dirs: Vec<String> = vec![];
-
-  let mut files: Vec<FileItem> = vec![];
-
-  for filename in &filenames_sorted {
-    if !metadata.contains_key(filename) {
-      metadata.insert(filename.clone(), determine_file_type(filename)?);
-    }
-
-    let stat = metadata.get(filename).unwrap();
-
-    let mut should_unpack = false;
-    if stat.is_dir() {
-      if let Some(unpack_dir) = &options.unpack_dir {
-        let relative_path = crate::filesystem::relative(&src, Path::new(filename))?;
-        should_unpack = is_unpacked_dir(
-          &relative_path.to_string_lossy().to_string(),
-          unpack_dir,
-          &mut unpack_dirs,
-        )?;
-      } else {
-        should_unpack = false
-      }
-      let mut directory_node = DirectoryNode::default();
-      if should_unpack {
-        directory_node.unpacked = Some(true);
-      }
-      filesystem.insert(filename, Node::Directory(directory_node))?;
-    } else if stat.is_file() {
-      if let Some(unpack) = &options.unpack {
-        should_unpack = minimatch(filename, unpack, true)?;
-      }
-      if !should_unpack {
-        if let Some(unpack_dir) = &options.unpack_dir {
-          let dirname = crate::filesystem::relative(&src, &get_dir(filename))?;
-          should_unpack = is_unpacked_dir(
-            &dirname.to_string_lossy().to_string(),
-            unpack_dir,
-            &mut unpack_dirs,
-          )?;
-        }
-      }
-
-      let mut file_item = FileItem {
-        filename: filename.clone(),
-        unpack: should_unpack,
-        transformed_file: None,
-      };
-
-      let dirpath = get_dir(filename).to_string_lossy().to_string();
-      let dir_node = filesystem.search_dir_node_from_path_mut(&dirpath)?;
-      let basename = Path::new(&filename)
-        .file_name()
-        .unwrap_or(&OsStr::new(""))
-        .to_str()
-        .unwrap_or(&"");
-      let mut insert_file_node = FileNode::default();
-      if should_unpack || dir_node.unpacked.unwrap_or(false) {
-        insert_file_node.size = stat.len() as usize;
-        insert_file_node.unpacked = Some(true);
-        insert_file_node.integrity = Some(get_file_integrity(filename)?);
-        dir_node
-          .files
-          .insert(basename.to_owned(), Node::File(insert_file_node));
-        files.push(file_item);
-        continue;
-      }
-
-      let size: usize;
-      if let Some(transform) = &options.transform {
-        let maybe_transformer = transform(filename);
-        if let Some(mut transformer) = maybe_transformer {
-          let mut original_file = File::open(filename)?;
-          let mut tmpfile = tempfile::Builder::new().tempfile()?;
-          let mut buffer = vec![0u8; BUFFER_SIZE];
-          loop {
-            let mut read_size = original_file.read(&mut buffer)?;
-            if read_size == 0 {
-              transformer.flush()?;
-              read_size = transformer.read(&mut buffer)?;
-              if read_size > 0 {
-                tmpfile.write(&buffer[0..read_size])?;
-              }
-              tmpfile.flush()?;
-              break;
-            }
-            transformer.transform(&buffer[0..read_size])?;
-            read_size = transformer.read(&mut buffer)?;
-            if read_size > 0 {
-              tmpfile.write(&buffer[0..read_size])?;
-            }
-          }
-          size = tmpfile.as_file().metadata()?.len() as usize;
-          file_item.transformed_file = Some(tmpfile)
-        } else {
-          size = stat.len() as usize;
-        }
-      } else {
-        size = stat.len() as usize;
-      }
-
-      if size > u32::MAX as usize {
-        return Err(Error::new(ErrorKind::FileTooLarge(filename.clone())));
-      }
-
-      insert_file_node.size = size;
-      insert_file_node.offset = Some(filesystem.offset.to_string());
-      insert_file_node.integrity = Some(get_file_integrity(filename)?);
-
-      #[cfg(not(target_os = "windows"))]
-      {
-        if stat.mode() & 0o100 != 0 {
-          insert_file_node.executable = Some(true);
-        }
-      }
-
-      filesystem.offset += size as u64;
-      filesystem.insert(filename, Node::File(insert_file_node))?;
-      files.push(file_item);
-    } else if stat.is_symlink() {
-      filesystem.insert_link(&filename)?;
-    }
+  /// Removes a file or directory node.
+  pub fn remove(&mut self, entry: &str) -> Option<Value> {
+    let parts: Vec<&str> = entry.split('/').filter(|p| !p.is_empty()).collect();
+    let (name, dirs) = parts.split_last()?;
+    self.dir_mut(dirs).remove(*name)
   }
 
-  std::fs::create_dir_all(get_dir(&dest))?;
-  crate::disk::write_filesystem(&dest, &filesystem, &mut files)?;
-  Ok(())
-}
-
-fn multiple_pattern(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
-  let mut begin: usize = usize::MAX;
-  let mut end: usize = usize::MAX;
-  for (i, c) in pattern.chars().enumerate() {
-    if c == '{' && begin == usize::MAX {
-      begin = i;
-    }
-    if c == '}' && end == usize::MAX && i >= begin {
-      end = i + 1;
-      break;
-    }
-  }
-  if begin != usize::MAX && end != usize::MAX {
-    let items: Vec<&str> = pattern[begin + 1..end - 1].split(',').collect();
-    Some((begin, end, items))
-  } else {
-    None
-  }
-}
-
-fn minimatch(path: &str, pattern: &str, match_base: bool) -> Result<bool> {
-  let value = if match_base {
-    Path::new(path)
-      .file_name()
-      .unwrap_or(&OsStr::new(""))
-      .to_str()
-      .unwrap_or(&"")
-  } else {
-    path
-  };
-  let mut patterns: Vec<String> = vec![pattern.to_owned()];
-  loop {
-    let mut should_continue = false;
-    patterns = patterns
-      .iter()
-      .map(|pattern| {
-        if let Some((begin, end, items)) = multiple_pattern(pattern) {
-          should_continue = true;
-          let sub: Vec<String> = items
-            .iter()
-            .map(|item| pattern[0..begin].to_owned() + *item + &pattern[end..])
-            .collect();
-          sub
-        } else {
-          vec![pattern.clone()]
-        }
-      })
-      .flatten()
-      .collect();
-    if !should_continue {
-      break;
-    }
+  pub fn set_node(&mut self, entry: &str, node: Value) {
+    let parts: Vec<&str> = entry.split('/').filter(|p| !p.is_empty()).collect();
+    let (name, dirs) = parts.split_last().expect("entry has a name");
+    self.dir_mut(dirs).insert(name.to_string(), node);
   }
 
-  let result = patterns.iter().any(|pattern| {
-    let g = glob::Pattern::new(pattern);
-    if let Ok(glob) = g {
-      glob.matches(value)
-    } else {
-      false
-    }
-  });
-  Ok(result)
-}
+  pub fn header(&self) -> &Value {
+    &self.header
+  }
 
-fn is_unpacked_dir(dir_path: &str, pattern: &str, unpack_dirs: &mut Vec<String>) -> Result<bool> {
-  if dir_path.starts_with(pattern) || minimatch(dir_path, pattern, false)? {
-    let dir_path_string = dir_path.to_owned();
-    if !unpack_dirs.contains(&dir_path_string) {
-      unpack_dirs.push(dir_path_string);
-    }
-    return Ok(true);
-  } else {
-    match unpack_dirs
-      .iter()
-      .find(|unpack_dir| dir_path.starts_with(*unpack_dir))
+  /// Writes the new archive next to `source` and atomically replaces `dest`.
+  pub fn write(self, source: &Archive, dest: &Path) -> io::Result<()> {
+    let json_text = serde_json::to_string(&self.header).map_err(|e| invalid(&e.to_string()))?;
+    let tmp = dest.with_extension("asar.ghostguessr-tmp");
     {
-      Some(_) => Ok(true),
-      None => Ok(false),
+      let mut out = BufWriter::new(File::create(&tmp)?);
+      out.write_all(&encode_header(&json_text))?;
+      let mut input = BufReader::new(File::open(&source.path)?);
+      input.seek(SeekFrom::Start(source.data_offset))?;
+      let copied = io::copy(&mut input.take(self.keep_data), &mut out)?;
+      if copied != self.keep_data {
+        drop(out);
+        let _ = fs::remove_file(&tmp);
+        return Err(invalid("archive ended early while copying"));
+      }
+      out.write_all(&self.appended)?;
+      out.flush()?;
+      out.get_ref().sync_all()?;
     }
+    // Validate before replacing the game file.
+    if let Err(error) = Archive::open(&tmp) {
+      let _ = fs::remove_file(&tmp);
+      return Err(error);
+    }
+    fs::rename(&tmp, dest).or_else(|_| {
+      // rename can fail across volumes or when the target is locked; fall back to copy.
+      fs::copy(&tmp, dest)?;
+      fs::remove_file(&tmp)
+    })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Builds a small archive with `package.json` packed and `bin/native.dll` unpacked.
+  fn fixture(dir: &Path) -> PathBuf {
+    let pkg = br#"{"name":"game","main":"dist/main.js"}"#;
+    let main = b"console.log('game');";
+    let header = json!({ "files": {
+      "package.json": { "size": pkg.len(), "offset": "0", "integrity": integrity(pkg) },
+      "dist": { "files": { "main.js": { "size": main.len(), "offset": pkg.len().to_string(), "integrity": integrity(main) } } },
+      "bin": { "unpacked": true, "files": { "native.dll": { "size": 3, "unpacked": true, "integrity": integrity(b"dll") } } }
+    }});
+    let path = dir.join("app.asar");
+    let mut bytes = encode_header(&header.to_string());
+    bytes.extend_from_slice(pkg);
+    bytes.extend_from_slice(main);
+    fs::write(&path, bytes).unwrap();
+    fs::create_dir_all(dir.join("app.asar.unpacked/bin")).unwrap();
+    fs::write(dir.join("app.asar.unpacked/bin/native.dll"), b"dll").unwrap();
+    path
+  }
+
+  #[test]
+  fn reads_and_appends() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture(dir.path());
+    let archive = Archive::open(&path).unwrap();
+    assert_eq!(archive.read_string("dist/main.js").unwrap(), "console.log('game');");
+    assert_eq!(archive.read("bin/native.dll").unwrap(), b"dll");
+
+    let mut edit = Edit::new(&archive);
+    edit.put("ghostguessr/bootstrap.js", b"require('../dist/main.js')");
+    edit.put("package.json", br#"{"main":"ghostguessr/bootstrap.js"}"#);
+    edit.write(&archive, &path).unwrap();
+
+    let patched = Archive::open(&path).unwrap();
+    assert_eq!(patched.read_string("ghostguessr/bootstrap.js").unwrap(), "require('../dist/main.js')");
+    assert_eq!(patched.read_string("package.json").unwrap(), r#"{"main":"ghostguessr/bootstrap.js"}"#);
+    assert_eq!(patched.read_string("dist/main.js").unwrap(), "console.log('game');");
+    assert_eq!(patched.node("bin/native.dll").unwrap()["unpacked"], json!(true));
   }
 }

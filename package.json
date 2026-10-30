@@ -1,15 +1,17 @@
 {
   "name": "ghostguessr",
-  "version": "2.3.3",
-  "description": "Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.",
+  "version": "3.0.0",
+  "description": "Ghost marker, score predictor and more for GeoGuessr on Web and Steam.",
   "private": false,
   "scripts": {
     "build": "webpack --mode production",
     "dev": "webpack --mode development",
     "watch": "webpack --mode development --watch",
     "serve": "webpack serve --mode development --open",
+    "preview": "webpack --mode development && node scripts/preview-server.js",
     "patcher:dev": "cd src/patcher && pnpm dev",
     "patcher:build": "cd src/patcher && pnpm build",
+    "patcher:test": "cd src/patcher/src-tauri && cargo test",
     "build:all": "pnpm build && pnpm patcher:build"
   },
   "repository": {

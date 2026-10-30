@@ -1,10 +1,32 @@
 const path = require('path');
+const webpack = require('webpack');
 const WebpackUserscript = require('webpack-userscript').default;
-const CopyPlugin = require('copy-webpack-plugin');
+const pkg = require('./package.json');
+
+const REPO = 'https://github.com/JojocraftTv/GhostGuessr';
+const RAW = 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/main';
+const RELEASES = `${REPO}/releases`;
+
+/**
+ * Build channels
+ *   stable  full releases (v* tags)            core: releases/latest/download/
+ *   beta    pre-releases (every push to main)  core: releases/download/beta/  (rolling "beta" release)
+ *   dev     local development                  core: http://localhost:8080/
+ *
+ * CI sets GG_CHANNEL and GG_VERSION (e.g. 3.1.0 or 3.1.0-beta.42); locally the
+ * version comes from package.json.
+ */
+const RELEASE_BASE = {
+  stable: `${RELEASES}/latest/download/`,
+  beta: `${RELEASES}/download/beta/`,
+  dev: 'http://localhost:8080/',
+};
 
 module.exports = (env, argv) => {
-  const isProduction = argv.mode === 'production';
   const isDev = argv.mode === 'development';
+  const channel = process.env.GG_CHANNEL || (isDev ? 'dev' : 'stable');
+  const version = process.env.GG_VERSION || (isDev ? `${pkg.version}-dev` : pkg.version);
+  const name = { stable: 'GhostGuessr', beta: 'GhostGuessr (Beta)', dev: 'GhostGuessr (DEV)' }[channel] || 'GhostGuessr';
 
   return {
     entry: './src/userscript/index.js',
@@ -20,48 +42,43 @@ module.exports = (env, argv) => {
           use: {
             loader: 'babel-loader',
             options: {
-              presets: ['@babel/preset-env'],
+              presets: [['@babel/preset-env', { targets: 'chrome >= 90, firefox >= 90, safari >= 15' }]],
             },
           },
         },
       ],
     },
     plugins: [
+      new webpack.DefinePlugin({
+        __GG_VERSION__: JSON.stringify(version),
+        __GG_CHANNEL__: JSON.stringify(channel),
+      }),
       new WebpackUserscript({
         headers: {
-          name: isDev ? 'GhostGuessr (DEV)' : 'GhostGuessr',
-          namespace: 'https://github.com/JojocraftTv/GhostGuessr',
-          version: isDev ? 'DEV' : '[version]',
-          description: 'Marks your Current Streetview Location on the GeoGuessr Map with a Red Dot. Toggle with hotkey.',
-          author: 'VellusFox, Niceas',
+          name,
+          namespace: REPO,
+          version,
+          description: pkg.description,
+          author: pkg.author,
           match: 'https://www.geoguessr.com/*',
           'run-at': 'document-start',
           'inject-into': 'page',
-          icon: 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/icons/GhostGuessr.png',
-          grant: ['GM_setValue', 'GM_getValue'],
-          downloadURL: 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js',
-          updateURL: 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/dist/ghostguessr-core.user.js',
+          icon: `${RAW}/icons/GhostGuessr.png`,
+          grant: ['GM_setValue', 'GM_getValue', 'unsafeWindow'],
           license: 'MIT',
         },
+        // The installable script (GhostGuessr.user.js) is a small proxy that
+        // @require's the core from the matching GitHub release.
         proxyScript: {
-          enable: isDev,
+          enable: true,
           filename: '[basename].proxy.user.js',
-          baseUrl: isDev ? 'http://localhost:8080/ghostguessr-core.user.js' : "https://github.com/JojocraftTv/GhostGuessr/raw/refs/heads/main/dist/ghostguessr-core.user.js",
-          updateURL: 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/GhostGuessr.user.js',
-          downloadURL: 'https://raw.githubusercontent.com/JojocraftTv/GhostGuessr/refs/heads/main/GhostGuessr.user.js',
+          baseURL: RELEASE_BASE[channel] || RELEASE_BASE.stable,
         },
       }),
-      new CopyPlugin({
-        patterns: [
-          {
-            from: 'dist/ghostguessr-core.proxy.user.js',
-            to: '../GhostGuessr.user.js',
-            noErrorOnMissing: true,
-          },
-        ],
-      }),
     ],
-    devtool: isProduction ? false : 'inline-source-map',
+    // Bundled country borders (Safety mode) make the script ~270 KB; that's expected.
+    performance: { hints: false },
+    devtool: isDev ? 'inline-source-map' : false,
     devServer: {
       static: {
         directory: path.join(__dirname, 'dist/local'),

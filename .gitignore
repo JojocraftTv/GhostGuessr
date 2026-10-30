@@ -1,7 +1,35 @@
+# Node.js
 **/node_modules/
 **/dist/
+**/.pnpm-store/
+
+# Rust / Cargo
 **/target/
+**/Cargo.lock
+**/*.rs.bk
+**/*.rlib
+**/*.rmeta
+
+# Tauri
+**/src-tauri/target/
+**/src-tauri/gen/
+**/src-tauri/.tauri/
 **/bundle/
+**/release/
+**/debug/
+**/icons/
+**/build/
+
+# Tauri generated files
+**/tauri.conf.json.bak
+**/*.app
+**/*.dmg
+**/*.deb
+**/*.rpm
+**/*.msi
+**/*.nsis.zip
+
+# General
 **/.tauri/
 **/.DS_Store
 **/.env
@@ -13,3 +41,6 @@
 **/*.bak
 **/.idea/
 **/.vscode/
+
+# Release
+release/

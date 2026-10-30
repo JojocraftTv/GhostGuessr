@@ -1,0 +1,17 @@
+name: CI
+
+# Pull requests: build the userscript and the patcher (incl. patcher tests)
+# without publishing anything.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      version: 0.0.0-pr.${{ github.event.pull_request.number }}
+      channel: beta

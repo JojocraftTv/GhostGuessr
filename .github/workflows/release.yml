@@ -1,0 +1,87 @@
+name: Release
+
+# Full release on a version tag:  git tag v3.1.0 && git push origin v3.1.0
+# Builds userscript + patcher for the stable channel, publishes them as the
+# "latest" release and updates the installer in the repository root so
+# installs from older versions migrate to release-based updates.
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "!v*-*" # pre-release tags (v3.1.0-beta.42) are created by beta.yml
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a release version (expected vX.Y.Z)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: stable
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publish release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --prerelease=false --latest
+          else
+            gh release create "$GITHUB_REF_NAME" release/* \
+              --verify-tag \
+              --latest \
+              --title "GhostGuessr $VERSION" \
+              --generate-notes
+          fi
+
+      - name: Update the installer in the repository root
+        continue-on-error: true # e.g. protected branch; the release itself is already published
+        run: |
+          cp release/GhostGuessr.user.js GhostGuessr.user.js
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add GhostGuessr.user.js package.json
+          if git diff --cached --quiet; then
+            echo "Nothing to update"
+          else
+            git commit -m "chore: release v$VERSION [skip ci]"
+            git push origin HEAD:main
+          fi

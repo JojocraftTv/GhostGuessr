@@ -1,0 +1,81 @@
+name: Beta release
+
+# Every push to main becomes a pre-release:
+#   - "vX.Y.Z-beta.N"  one pre-release per commit (history)
+#   - "beta"           rolling pre-release with fixed download URLs; the beta
+#                      userscript (GhostGuessr.beta.user.js) and beta patchers
+#                      update from here
+# X.Y.Z comes from package.json (next patch version if it was already released),
+# N is the workflow run number.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags
+      - id: version
+        run: |
+          BASE="$(node -p "require('./package.json').version")"
+          # Already released? Betas count towards the next patch version (3.1.0 -> 3.1.1-beta.N).
+          if git rev-parse -q --verify "refs/tags/v$BASE" >/dev/null; then
+            BASE="$(node -p "const [a,b,c]='$BASE'.split('.').map(Number); [a,b,c+1].join('.')")"
+          fi
+          echo "version=$BASE-beta.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      channel: beta
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Pre-release for this commit
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" release/* --clobber # re-run
+          else
+            gh release create "v$VERSION" release/* \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "GhostGuessr $VERSION" \
+              --generate-notes
+          fi
+
+      - name: Update the rolling "beta" pre-release
+        run: |
+          gh release delete beta --cleanup-tag --yes || true
+          gh release create beta release/* \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Beta $VERSION" \
+            --notes "Latest beta build ($VERSION, commit ${GITHUB_SHA::7}). Install the userscript: [GhostGuessr.beta.user.js](https://github.com/${{ github.repository }}/releases/download/beta/GhostGuessr.beta.user.js)"

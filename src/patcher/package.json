@@ -1,6 +1,6 @@
 {
   "name": "ghostguessr-patcher",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "GhostGuessr Patcher - Tauri Desktop Application",
   "private": true,
   "scripts": {

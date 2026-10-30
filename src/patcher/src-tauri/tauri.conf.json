@@ -1,6 +1,6 @@
 {
   "productName": "GhostGuessr Patcher",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "identifier": "de.niceas.ghostguessr-patcher",
   "build": {
     "beforeBuildCommand": "",
@@ -17,12 +17,15 @@
         "resizable": false,
         "fullscreen": false,
         "decorations": false,
-        "devtools": false
+        "devtools": false,
+        "label": "main"
       }
     ],
     "security": {
       "csp": null,
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "plugins": {}
